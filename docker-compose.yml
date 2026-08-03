@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  velurix-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: velurix-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - DATABASE_URL=sqlite:/app/data/velurix.db
+      - ENGINE_DATA_DIR=/app/data/sessions
+      - ENGINE_SCRIPT_PATH=/app/apps/whatsapp-engine/dist/index.js
+      - RUST_LOG=info,velurix_api=debug
+    volumes:
+      - velurix-backend-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  velurix-backend-data:

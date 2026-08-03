@@ -1,0 +1,27 @@
+[
+  {
+    "testName": "Edge Case: limit = 0 in getChatMessages",
+    "passed": false,
+    "details": "BUG DETECTED: Passing limit=0 resulted in returning ALL 3 messages because Array.prototype.slice(-0) evaluates to slice(0). Expected 0 messages."
+  },
+  {
+    "testName": "IPC Protocol: emitEvent JSON schema",
+    "passed": true,
+    "details": "Payload structure matches Rust EngineEvent schema (sessionId, timestamp, v, optional data)."
+  },
+  {
+    "testName": "JID Resolution: wwebjs sendText group JID handling",
+    "passed": false,
+    "details": "BUG DETECTED: wwebjs sendText transforms group JID '120363040000000000@g.us' into '120363040000000000@c.us', stripping @g.us suffix and converting it to a user @c.us JID."
+  },
+  {
+    "testName": "JID Resolution: Baileys sendText group JID handling",
+    "passed": true,
+    "details": "Correctly preserves group JID '120363040000000000@g.us' without mangling."
+  },
+  {
+    "testName": "Contact Fallback: missing name / notify / LID handling",
+    "passed": true,
+    "details": "Name correctly falls back to notify, verifiedName, or raw phone number."
+  }
+]

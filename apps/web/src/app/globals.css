@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 4.9% 95.9%; /* #f4f4f5 soft zinc canvas */
+    --foreground: 240 10% 3.9%; /* #09090b deep dark text */
+
+    --card: 0 0% 100%; /* #ffffff pure white panels */
+    --card-foreground: 240 10% 3.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+
+    --primary: 240 5.9% 10%; /* #18181b */
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+
+    --muted: 240 4.8% 93.5%; /* #e4e4e7 */
+    --muted-foreground: 240 3.8% 46.1%; /* #71717a */
+
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 5.9% 90%; /* #e4e4e7 border */
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
+
+    --radius: 0.875rem;
+
+    --panel-bg: 0 0% 100%;
+    --sidebar-bg: 0 0% 100%;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%; /* #09090b pitch zinc */
+    --foreground: 0 0% 96%; /* #f4f4f5 text */
+
+    --card: 240 10% 5.5%; /* #0e0e11 dark panel */
+    --card-foreground: 0 0% 96%;
+
+    --popover: 240 10% 6.5%;
+    --popover-foreground: 0 0% 96%;
+
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 10% 3.9%;
+
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 3.7% 12%; /* #18181b */
+    --muted-foreground: 240 5% 64.9%; /* #a1a1aa */
+
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 3.7% 15.9%; /* #27272a border */
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+
+    --panel-bg: 240 10% 4.8%; /* #0c0c0e */
+    --sidebar-bg: 240 10% 4.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased selection:bg-zinc-200 dark:selection:bg-zinc-800 selection:text-zinc-900 dark:selection:text-zinc-100;
+  }
+}
+
+/* Custom minimal scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.3);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.5);
+}

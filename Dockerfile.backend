@@ -1,0 +1,82 @@
+# ==========================================
+# Stage 1: Build Node.js WhatsApp Engine
+# ==========================================
+FROM node:20-bookworm-slim AS engine-builder
+
+WORKDIR /app
+
+# Copy root workspace package files
+COPY package.json package-lock.json ./
+COPY apps/whatsapp-engine/package.json ./apps/whatsapp-engine/
+COPY apps/mcp-server/package.json ./apps/mcp-server/
+
+# Install Node dependencies
+RUN npm ci
+
+# Copy whatsapp-engine source code
+COPY apps/whatsapp-engine ./apps/whatsapp-engine
+
+# Build TypeScript to dist/index.js
+RUN cd apps/whatsapp-engine && npm run build
+
+# Copy mcp-server source code and build
+COPY apps/mcp-server/ ./apps/mcp-server/
+RUN cd apps/mcp-server && npx tsc
+
+
+# ==========================================
+# Stage 2: Build Rust API Binary
+# ==========================================
+FROM rust:bookworm AS rust-builder
+
+WORKDIR /app
+
+# Copy API Cargo files and source code
+COPY apps/api ./apps/api
+
+# Build release binary
+RUN cd apps/api && cargo build --release
+
+
+# ==========================================
+# Stage 3: Production Runtime (Backend Only)
+# ==========================================
+FROM node:20-bookworm-slim
+
+# Install runtime system dependencies (OpenSSL, CA Certificates, SQLite3)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
+    ca-certificates \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy node_modules, built whatsapp-engine dist, and mcp-server dist
+COPY --from=engine-builder /app/node_modules ./node_modules
+COPY --from=engine-builder /app/apps/whatsapp-engine ./apps/whatsapp-engine
+COPY --from=engine-builder /app/apps/mcp-server ./apps/mcp-server
+
+# Copy compiled Rust API binary
+COPY --from=rust-builder /app/apps/api/target/release/velurix-api ./velurix-api
+
+# Create directory for SQLite database & persistent session store
+RUN mkdir -p /app/data/sessions
+
+# Environment Configuration
+ENV HOST=0.0.0.0
+ENV PORT=8080
+ENV DATABASE_URL=sqlite:/app/data/velurix.db
+ENV ENGINE_DATA_DIR=/app/data/sessions
+ENV ENGINE_SCRIPT_PATH=/app/apps/whatsapp-engine/dist/index.js
+ENV MCP_SERVER_PATH=/app/apps/mcp-server/dist/index.js
+ENV RUST_LOG=info,velurix_api=debug
+
+# Expose backend API and WebSocket port
+EXPOSE 8080
+
+# Volume for database & session persistence across container restarts
+VOLUME ["/app/data"]
+
+# Run the backend API binary
+CMD ["/app/velurix-api"]

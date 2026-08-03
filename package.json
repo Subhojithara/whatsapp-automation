@@ -1,0 +1,8 @@
+{
+  "name": "velurix-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

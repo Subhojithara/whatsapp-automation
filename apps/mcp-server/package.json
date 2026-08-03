@@ -1,0 +1,24 @@
+{
+  "name": "@velurix/mcp-server",
+  "version": "1.0.0",
+  "description": "Production-ready MCP Server for Velurix ReachOut WhatsApp Automation",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.1.2",
+    "zod": "^3.24.1",
+    "qrcode": "^1.5.4",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.5",
+    "typescript": "^5.7.0"
+  }
+}
