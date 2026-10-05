@@ -68,6 +68,24 @@ mod tests {
             "Unexpected combined result: {}",
             res_combined
         );
+
+        // Zero-width entropy test
+        let base_msg = "Hello friend, this is a test outreach message for WhatsApp.";
+        let salted1 = SpintaxResolver::inject_zero_width_entropy(base_msg);
+        let salted2 = SpintaxResolver::inject_zero_width_entropy(base_msg);
+
+        // Filter out zero-width characters to confirm text integrity
+        let stripped1: String = salted1
+            .chars()
+            .filter(|&c| c != '\u{200B}' && c != '\u{200C}' && c != '\u{200D}' && c != '\u{FEFF}')
+            .collect();
+        let stripped2: String = salted2
+            .chars()
+            .filter(|&c| c != '\u{200B}' && c != '\u{200C}' && c != '\u{200D}' && c != '\u{FEFF}')
+            .collect();
+
+        assert_eq!(stripped1, base_msg);
+        assert_eq!(stripped2, base_msg);
     }
 
     #[tokio::test]

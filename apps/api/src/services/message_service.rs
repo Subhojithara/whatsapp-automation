@@ -63,7 +63,12 @@ impl MessageService {
         req: SendTextRequest,
     ) -> Result<MessageResponse, AppError> {
         let chat_id = Self::validate_recipient(&req.to)?;
-        let text_body = Self::validate_text(&req.text)?;
+        let raw_text = Self::validate_text(&req.text)?;
+        let text_body = if raw_text.contains('{') && raw_text.contains('|') && raw_text.contains('}') {
+            crate::services::spintax_service::SpintaxResolver::parse_spintax(&raw_text)
+        } else {
+            raw_text
+        };
 
         // 1. Session validation with transient reconnect wait (up to 10s)
         let mut session = SessionService::get_session(pool, session_id).await?;

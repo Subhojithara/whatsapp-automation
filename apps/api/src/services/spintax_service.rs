@@ -171,4 +171,22 @@ impl SpintaxResolver {
 
         cleaned
     }
+
+    /// Injects random zero-width Unicode characters between words to randomize cryptographic and perceptual hashes
+    /// without altering visual appearance or readability for the human recipient.
+    pub fn inject_zero_width_entropy(input: &str) -> String {
+        const INVISIBLE_CHARS: [char; 4] = ['\u{200B}', '\u{200C}', '\u{200D}', '\u{FEFF}'];
+        let mut rng = rand::thread_rng();
+        let mut result = String::with_capacity(input.len() + 32);
+
+        for ch in input.chars() {
+            result.push(ch);
+            if (ch == ' ' || ch == '.' || ch == '!' || ch == '?' || ch == ',') && rng.gen_bool(0.6) {
+                let rand_char = INVISIBLE_CHARS[rng.gen_range(0..INVISIBLE_CHARS.len())];
+                result.push(rand_char);
+            }
+        }
+
+        result
+    }
 }

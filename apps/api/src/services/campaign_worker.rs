@@ -393,6 +393,9 @@ impl CampaignWorker {
                     SpintaxResolver::interpolate_variables(template_to_use, custom_vars_json.as_ref())
                 };
 
+                // Stealth anti-detection: inject invisible zero-width entropy to randomize SHA256 & perceptual text hashes
+                let body = SpintaxResolver::inject_zero_width_entropy(&body);
+
                 // Anti-ban delay jitter with micro-variance & dynamic throttle multiplier
                 if config.max_delay_sec > 0 && config.max_delay_sec >= config.min_delay_sec {
                     let total_delay_ms = {
