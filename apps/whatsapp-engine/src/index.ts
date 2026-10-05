@@ -110,6 +110,13 @@ async function processCommand(line: string): Promise<void> {
         break;
       }
 
+      case 'engine.send_reaction': {
+        if (activeSocket && typeof activeSocket.sendReaction === 'function') {
+          await activeSocket.sendReaction(cmd.chatId, cmd.messageId, cmd.emoji);
+        }
+        break;
+      }
+
       case 'engine.get_contacts': {
         if (activeSocket) {
           try {

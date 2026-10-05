@@ -66,12 +66,20 @@ export interface MarkChatReadCommand extends BaseCommand {
   jid: string;
 }
 
+export interface SendReactionCommand extends BaseCommand {
+  cmd: 'engine.send_reaction';
+  chatId: string;
+  messageId: string;
+  emoji: string;
+}
+
 export type IncomingCommand =
   | StartCommand
   | StopCommand
   | RequestPairingCodeCommand
   | SendTextCommand
   | SendMediaCommand
+  | SendReactionCommand
   | GetContactsCommand
   | GetChatsCommand
   | GetChatMessagesCommand

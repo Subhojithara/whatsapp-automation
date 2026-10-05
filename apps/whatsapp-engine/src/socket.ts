@@ -1110,6 +1110,30 @@ export class EngineSocket {
     });
   }
 
+  async sendReaction(chatId: string, messageId: string, emoji: string): Promise<void> {
+    return this.enqueueSend(async () => {
+      if (!this.sock || this.connectionState !== 'open') {
+        console.error(`[Engine Socket] Connection not open. Cannot send reaction for ${messageId}`);
+        return;
+      }
+      try {
+        const targetJid = await this.toDeliverableJid(chatId);
+        console.error(`[Engine Socket] Sending reaction '${emoji}' to message ${messageId} in ${targetJid}`);
+        await this.sock.sendMessage(targetJid, {
+          react: {
+            text: emoji,
+            key: {
+              remoteJid: targetJid,
+              id: messageId,
+            },
+          },
+        });
+      } catch (err: any) {
+        console.error(`[Engine Socket] Failed to send reaction for message ${messageId}:`, err?.message);
+      }
+    });
+  }
+
   async getContacts(): Promise<void> {
     const contactsPromises = Array.from(this.contactStore.values())
       .filter((c) => c.id && c.id !== '0' && c.id !== '0@s.whatsapp.net' && c.id !== 'status@broadcast')
