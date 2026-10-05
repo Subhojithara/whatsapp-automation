@@ -245,6 +245,26 @@ impl EngineClient {
         self.send_command(&cmd).await
     }
 
+    pub async fn mark_chat_read(&self, jid: &str) -> Result<(), AppError> {
+        let cmd = EngineCommand::MarkChatRead {
+            session_id: self.session_id.clone(),
+            jid: jid.to_string(),
+            v: 1,
+        };
+        self.send_command(&cmd).await
+    }
+
+    pub async fn send_reaction(&self, chat_id: &str, message_id: &str, emoji: &str) -> Result<(), AppError> {
+        let cmd = EngineCommand::SendReaction {
+            session_id: self.session_id.clone(),
+            chat_id: chat_id.to_string(),
+            message_id: message_id.to_string(),
+            emoji: emoji.to_string(),
+            v: 1,
+        };
+        self.send_command(&cmd).await
+    }
+
     pub async fn is_alive(&self) -> bool {
         let mut child = self._child.lock().await;
         match child.try_wait() {

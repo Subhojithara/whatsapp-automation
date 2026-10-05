@@ -222,6 +222,27 @@ impl EngineManager {
         }
     }
 
+    pub async fn mark_chat_read(&self, session_id: &str, jid: &str) -> Result<(), AppError> {
+        let clients = self.clients.read().await;
+        if let Some(client) = clients.get(session_id) {
+            client.mark_chat_read(jid).await
+        } else {
+            Ok(())
+        }
+    }
+
+    pub async fn send_reaction(&self, session_id: &str, chat_id: &str, message_id: &str, emoji: &str) -> Result<(), AppError> {
+        let clients = self.clients.read().await;
+        if let Some(client) = clients.get(session_id) {
+            client.send_reaction(chat_id, message_id, emoji).await
+        } else {
+            Err(AppError::EngineNotAvailable(format!(
+                "No running engine process found for session {}",
+                session_id
+            )))
+        }
+    }
+
     pub async fn is_running(&self, session_id: &str) -> bool {
         let client_opt = {
             let clients = self.clients.read().await;

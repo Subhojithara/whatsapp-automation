@@ -101,6 +101,24 @@ pub enum EngineCommand {
         duration_ms: Option<u64>,
         v: u32,
     },
+    #[serde(rename = "engine.mark_chat_read")]
+    MarkChatRead {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        jid: String,
+        v: u32,
+    },
+    #[serde(rename = "engine.send_reaction")]
+    SendReaction {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        #[serde(rename = "chatId")]
+        chat_id: String,
+        #[serde(rename = "messageId")]
+        message_id: String,
+        emoji: String,
+        v: u32,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

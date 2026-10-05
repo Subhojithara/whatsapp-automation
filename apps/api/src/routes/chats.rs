@@ -69,6 +69,7 @@ pub async fn get_chat_messages(
     let offset = query.offset.unwrap_or(0).max(0);
 
     let _ = ChatService::mark_chat_read(&pool, &session_id, &chat_id).await;
+    let _ = engine_manager.mark_chat_read(&session_id, &chat_id).await;
 
     let messages =
         MessageService::list_messages(&pool, &session_id, &chat_id, limit, offset).await?;
@@ -89,12 +90,14 @@ pub async fn get_chat_messages(
 pub async fn mark_chat_read(
     req: HttpRequest,
     pool: web::Data<SqlitePool>,
+    engine_manager: web::Data<EngineManager>,
     config: web::Data<Config>,
     path: web::Path<(String, String)>,
 ) -> Result<HttpResponse, AppError> {
     verify_api_key_header(&req, &config)?;
     let (session_id, chat_id) = path.into_inner();
     let chat = ChatService::mark_chat_read(&pool, &session_id, &chat_id).await?;
+    let _ = engine_manager.mark_chat_read(&session_id, &chat_id).await;
 
     Ok(HttpResponse::Ok().json(ApiSuccessEnvelope {
         success: true,
