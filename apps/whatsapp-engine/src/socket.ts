@@ -1418,6 +1418,11 @@ export class EngineSocket {
           results.push({ phone_number: p, phoneNumber: p, exists: false });
         }
       }
+
+      if (i + chunkSize < phoneNumbers.length) {
+        const jitter = Math.floor(Math.random() * 1000) + 1500;
+        await new Promise((resolve) => setTimeout(resolve, jitter));
+      }
     }
 
     emitEvent('phones.validated', this.sessionId, { results });
