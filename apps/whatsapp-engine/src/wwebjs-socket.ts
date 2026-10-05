@@ -46,6 +46,19 @@ export class WebJsEngineSocket {
     }
   }
 
+  async markChatRead(jid: string): Promise<void> {
+    if (!this.client) return;
+    try {
+      const chat = await this.client.getChatById(jid);
+      if (chat) {
+        await chat.sendSeen();
+      }
+      emitEvent('chat.marked_read', this.sessionId, { jid });
+    } catch (e: any) {
+      console.error(`[WebJS Engine] markChatRead warning: ${e?.message}`);
+    }
+  }
+
   constructor(sessionId: string) {
     this.sessionId = sessionId;
   }

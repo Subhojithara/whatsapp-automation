@@ -192,6 +192,13 @@ async function processCommand(line: string): Promise<void> {
         break;
       }
 
+      case 'engine.mark_chat_read': {
+        if (activeSocket && typeof activeSocket.markChatRead === 'function') {
+          await activeSocket.markChatRead(cmd.jid);
+        }
+        break;
+      }
+
       default:
         console.error(`[Engine Process] Unknown command: ${(cmd as any).cmd}`);
     }

@@ -37,6 +37,31 @@ export class EngineSocket {
   private lidToPn = new Map<string, string>();
   private pnToLid = new Map<string, string>();
   private idlePresenceTimer: NodeJS.Timeout | null = null;
+  private sendQueue: Promise<any> = Promise.resolve();
+  private lastMessageSentAt = 0;
+
+  private enqueueSend<T>(task: () => Promise<T>): Promise<T> {
+    const runTask = async () => {
+      const now = Date.now();
+      const elapsed = now - this.lastMessageSentAt;
+      if (this.lastMessageSentAt > 0 && elapsed < 800) {
+        const jitter = Math.floor(Math.random() * 400) + (800 - elapsed);
+        await new Promise((resolve) => setTimeout(resolve, jitter));
+      }
+      try {
+        return await task();
+      } finally {
+        this.lastMessageSentAt = Date.now();
+      }
+    };
+
+    const next = this.sendQueue.then(runTask, runTask);
+    this.sendQueue = next.then(
+      () => {},
+      () => {}
+    );
+    return next;
+  }
 
   public resetIdlePresence(delayMs = 60000): void {
     if (this.idlePresenceTimer) {
@@ -90,6 +115,47 @@ export class EngineSocket {
       await this.sock.sendPresenceUpdate(presence);
     } catch (e: any) {
       console.error(`[Engine Socket] Failed to set presence: ${e?.message}`);
+    }
+  }
+
+  async markChatRead(rawJid: string): Promise<void> {
+    if (!this.sock) return;
+    try {
+      const normalized = jidNormalizedUser(rawJid);
+      const targetJid = await this.resolveJid(normalized);
+
+      const keysToRead: any[] = [];
+      for (const msg of this.messageStore.values()) {
+        const msgJid = jidNormalizedUser(msg.key?.remoteJid || '');
+        if ((msgJid === normalized || msgJid === targetJid) && !msg.key?.fromMe && msg.key?.id) {
+          keysToRead.push({
+            remoteJid: msg.key.remoteJid,
+            id: msg.key.id,
+            participant: msg.key.participant,
+          });
+        }
+      }
+
+      if (keysToRead.length > 0) {
+        const recentKeys = keysToRead.slice(-20);
+        console.error(`[Engine Socket] Sending read receipts for ${recentKeys.length} messages in chat ${targetJid}`);
+        await this.sock.readMessages(recentKeys);
+      }
+
+      const chat = this.chatStore.get(rawJid) || this.chatStore.get(targetJid);
+      if (chat) {
+        chat.unreadCount = 0;
+      }
+
+      try {
+        if ((this.sock as any).chatModify) {
+          await (this.sock as any).chatModify({ markRead: true, lastMessages: keysToRead.slice(-1) }, targetJid);
+        }
+      } catch (_) {}
+
+      emitEvent('chat.marked_read', this.sessionId, { jid: targetJid });
+    } catch (err: any) {
+      console.error(`[Engine Socket] Failed to mark chat ${rawJid} read:`, err?.message);
     }
   }
 
@@ -805,7 +871,8 @@ export class EngineSocket {
   }
 
   async sendText(chatId: string, text: string, messageId: string): Promise<void> {
-    // If socket exists but connection is transiently reconnecting/connecting, wait up to 10s for open state
+    return this.enqueueSend(async () => {
+      // If socket exists but connection is transiently reconnecting/connecting, wait up to 10s for open state
     if (this.sock && (this.connectionState as string) !== 'open') {
       console.error(`[Engine Socket] Connection state is '${this.connectionState}' for ${this.sessionId}. Waiting up to 10s for connection to open...`);
       const startTime = Date.now();
@@ -957,6 +1024,7 @@ export class EngineSocket {
       } catch (_) {}
       this.resetIdlePresence();
     }
+    });
   }
 
   async getContacts(): Promise<void> {
@@ -1157,7 +1225,8 @@ export class EngineSocket {
     mimetype?: string,
     messageId?: string
   ): Promise<void> {
-    if (!this.sock || this.connectionState !== 'open') {
+    return this.enqueueSend(async () => {
+      if (!this.sock || this.connectionState !== 'open') {
       const err = `WhatsApp connection is not open (current state: ${this.connectionState})`;
       if (messageId) {
         emitEvent('message.failed', this.sessionId, { messageId, error: err });
@@ -1266,6 +1335,7 @@ export class EngineSocket {
       } catch (_) {}
       this.resetIdlePresence();
     }
+    });
   }
 
   async validatePhones(phoneNumbers: string[]): Promise<void> {

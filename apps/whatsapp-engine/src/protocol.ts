@@ -61,6 +61,11 @@ export interface SetPresenceCommand extends BaseCommand {
   presence: 'available' | 'unavailable';
 }
 
+export interface MarkChatReadCommand extends BaseCommand {
+  cmd: 'engine.mark_chat_read';
+  jid: string;
+}
+
 export type IncomingCommand =
   | StartCommand
   | StopCommand
@@ -73,7 +78,8 @@ export type IncomingCommand =
   | GetProfilePictureCommand
   | ValidatePhonesCommand
   | SimulatePresenceCommand
-  | SetPresenceCommand;
+  | SetPresenceCommand
+  | MarkChatReadCommand;
 
 export interface GetContactsCommand extends BaseCommand {
   cmd: 'engine.get_contacts';
