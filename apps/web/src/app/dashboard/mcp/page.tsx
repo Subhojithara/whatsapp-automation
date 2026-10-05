@@ -8,8 +8,6 @@ import {
   Terminal,
   QrCode,
   Shield,
-  Layers,
-  Sparkles,
   BookOpen,
   Server,
   Zap,
@@ -231,7 +229,7 @@ export default function McpDocsPage() {
                 : "bg-zinc-800/60 text-zinc-300 hover:bg-zinc-800 hover:text-white"
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5" /> Antigravity Agent Skill
+            <Cpu className="w-3.5 h-3.5" /> Antigravity Agent Skill
           </button>
           <button
             onClick={() => setActiveTab("docker")}
@@ -255,7 +253,7 @@ export default function McpDocsPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-emerald-500" /> Google Antigravity
+                    <Bot className="w-4 h-4 text-emerald-500" /> Google Antigravity
                   </span>
                   <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md font-mono">
                     .gemini/settings.json
@@ -452,7 +450,7 @@ export default function McpDocsPage() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-emerald-500" /> Installed Antigravity Agent Skill
+                <Cpu className="w-5 h-5 text-emerald-500" /> Installed Antigravity Agent Skill
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 Location: <code className="bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded text-emerald-500">C:\Users\subho\.gemini\config\skills\reachout-mcp-control\SKILL.md</code>

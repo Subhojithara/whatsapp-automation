@@ -11,7 +11,6 @@
 //   AlertCircle,
 //   Smartphone,
 //   MessageSquare,
-//   Sparkles,
 //   Info,
 //   Key,
 // } from "lucide-react";
@@ -85,7 +84,6 @@
 //     <div className="max-w-3xl mx-auto space-y-8 py-4">
 //       <div className="text-center space-y-2 pt-2">
 //         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-//           <Sparkles className="w-3.5 h-3.5" />
 //           <span>Single-Message Gateway Pipeline</span>
 //         </div>
 //         <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
