@@ -1265,6 +1265,14 @@ export class EngineSocket {
         throw new Error('Invalid media input data');
       }
 
+      // Media Hash Randomization (Anti-Detection):
+      // Append subtle random trailing bytes to generate a unique SHA-256 hash
+      // preventing WhatsApp from grouping bulk media distributions into spam fingerprints.
+      if (buffer.length > 32 && (mediaType === 'image' || mediaType === 'document')) {
+        const randomSalt = Buffer.from(`\n%_salt_${Math.random().toString(36).substring(2, 10)}`);
+        buffer = Buffer.concat([buffer, randomSalt]);
+      }
+
       let messageContent: any = {};
       if (mediaType === 'image') {
         messageContent = { image: buffer, caption };
