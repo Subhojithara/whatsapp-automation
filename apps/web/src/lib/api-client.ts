@@ -5,7 +5,7 @@ import { Contact, Chat, Message } from '@/types/chat';
 const rawApiBase = process.env.NEXT_PUBLIC_API_URL || 'https://213-136-76-153.sslip.io/api/v1';
 const cleanBase = rawApiBase.replace(/\/+$/, '');
 const API_BASE = cleanBase.endsWith('/api/v1') ? cleanBase : `${cleanBase}/api/v1`;
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || 'xCdANIh_JYwEwczVoPOfp1SdV0YTvhBkNqWPsjkfhVBiazJm6cCyJraMVEo9jxvp';
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   let targetUrl = url;

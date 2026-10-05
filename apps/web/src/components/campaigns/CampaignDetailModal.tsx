@@ -60,7 +60,10 @@ export function CampaignDetailModal({
   };
 
   const handleExport = () => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+    const rawBase = process.env.NEXT_PUBLIC_API_URL || "https://213-136-76-153.sslip.io/api/v1";
+    const apiBase = typeof window !== 'undefined' && window.location.protocol === 'https:' && rawBase.startsWith('http://')
+      ? rawBase.replace(/^http:\/\//, 'https://')
+      : rawBase;
     window.open(`${apiBase}/campaigns/${currentCampaign.id}/export?format=csv`, "_blank");
   };
 
