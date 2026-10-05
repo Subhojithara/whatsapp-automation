@@ -221,6 +221,7 @@ export class EngineSocket {
           this.sock.ev.removeAllListeners('contacts.upsert');
           this.sock.ev.removeAllListeners('chats.upsert');
           this.sock.ev.removeAllListeners('messaging-history.set');
+          this.sock.ev.removeAllListeners('call');
           this.sock.end(undefined);
           this.sock.ws?.close();
         } catch (e: any) {
@@ -423,6 +424,25 @@ export class EngineSocket {
               status: statusStr,
               statusCode: update.status,
             });
+          }
+        }
+      });
+
+      this.sock.ev.on('call', async (callEvents) => {
+        for (const call of callEvents) {
+          if (call.status === 'offer') {
+            console.error(`[Engine Socket] Incoming WhatsApp call detected from ${call.from} (id: ${call.id}). Declining call...`);
+            try {
+              await this.sock?.rejectCall(call.id, call.from);
+              emitEvent('call.rejected', this.sessionId, {
+                callId: call.id,
+                from: call.from,
+                isVideo: call.isVideo || false,
+                timestamp: call.date ? call.date.toISOString() : new Date().toISOString(),
+              });
+            } catch (err: any) {
+              console.error(`[Engine Socket] Failed to decline call ${call.id}: ${err?.message}`);
+            }
           }
         }
       });
@@ -1510,6 +1530,7 @@ export class EngineSocket {
         this.sock.ev.removeAllListeners('contacts.upsert');
         this.sock.ev.removeAllListeners('chats.upsert');
         this.sock.ev.removeAllListeners('messaging-history.set');
+        this.sock.ev.removeAllListeners('call');
         this.sock.end(undefined);
         this.sock.ws?.close();
       } catch (e: any) {
