@@ -57,6 +57,7 @@ export function Sidebar({
       title: "Send Test Message",
       href: "/dashboard/messages",
       icon: Send,
+      disabled: true,
     },
     {
       title: "Analytics",

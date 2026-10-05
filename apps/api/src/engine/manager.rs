@@ -25,6 +25,7 @@ impl EngineManager {
         &self,
         session_id: String,
         auth_dir: String,
+        engine_type: Option<String>,
     ) -> Result<(), AppError> {
         let mut clients = self.clients.write().await;
         if clients.contains_key(&session_id) {
@@ -34,6 +35,7 @@ impl EngineManager {
         let client = EngineClient::spawn(
             session_id.clone(),
             auth_dir,
+            engine_type,
             self.engine_script_path.clone(),
             self.event_tx.clone(),
         )

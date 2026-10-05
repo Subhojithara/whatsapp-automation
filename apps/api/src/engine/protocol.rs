@@ -9,6 +9,8 @@ pub enum EngineCommand {
         session_id: String,
         #[serde(rename = "authDir")]
         auth_dir: String,
+        #[serde(rename = "engineType", skip_serializing_if = "Option::is_none")]
+        engine_type: Option<String>,
         v: u32,
     },
     #[serde(rename = "engine.stop")]

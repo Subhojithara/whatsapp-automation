@@ -9,4 +9,5 @@ pub mod warmup_service;
 pub mod export_service;
 pub mod campaign_service;
 pub mod campaign_worker;
+pub mod account_health_service;
 

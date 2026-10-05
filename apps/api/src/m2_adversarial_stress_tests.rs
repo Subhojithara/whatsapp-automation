@@ -148,7 +148,7 @@ mod tests {
                 recipients: None,
                 anti_ban_config: None,
                 steps: Some(vec![CreateStepDto {
-                    step_number: 1,
+                    step_number: Some(1),
                     delay_after_previous_sec: Some(0),
                     template_text: "Hello".to_string(),
                     media_url: None,
@@ -336,13 +336,13 @@ mod tests {
                 anti_ban_config: None,
                 steps: Some(vec![
                     CreateStepDto {
-                        step_number: 1,
+                        step_number: Some(1),
                         delay_after_previous_sec: Some(0),
                         template_text: "Step 1".to_string(),
                         media_url: None,
                     },
                     CreateStepDto {
-                        step_number: 2,
+                        step_number: Some(2),
                         delay_after_previous_sec: Some(60),
                         template_text: "Step 2".to_string(),
                         media_url: None,
@@ -436,7 +436,7 @@ mod tests {
                 recipients: None,
                 anti_ban_config: None,
                 steps: Some(vec![CreateStepDto {
-                    step_number: 1,
+                    step_number: Some(1),
                     delay_after_previous_sec: Some(0),
                     template_text: "FK Step".to_string(),
                     media_url: None,

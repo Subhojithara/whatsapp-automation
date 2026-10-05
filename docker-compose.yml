@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   velurix-backend:
     build:
@@ -7,14 +5,26 @@ services:
       dockerfile: Dockerfile.backend
     container_name: velurix-backend
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT:-8090}:8080"
     environment:
       - HOST=0.0.0.0
       - PORT=8080
       - DATABASE_URL=sqlite:/app/data/velurix.db
       - ENGINE_DATA_DIR=/app/data/sessions
       - ENGINE_SCRIPT_PATH=/app/apps/whatsapp-engine/dist/index.js
+      - API_KEY=${API_KEY:-xCdANIh_JYwEwczVoPOfp1SdV0YTvhBkNqWPsjkfhVBiazJm6cCyJraMVEo9jxvp}
+      - ENGINE_TYPE=${ENGINE_TYPE:-baileys}
+      - CHROME_PATH=/usr/bin/chromium
+      - PUPPETEER_HEADLESS=true
+      - ENGINE_SEND_TIMEOUT_SECS=60
       - RUST_LOG=info,velurix_api=debug
+    shm_size: '1gb'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     volumes:
       - velurix-backend-data:/app/data
     restart: unless-stopped

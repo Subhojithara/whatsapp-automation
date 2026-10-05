@@ -9,6 +9,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/whatsapp-engine/package.json ./apps/whatsapp-engine/
 COPY apps/mcp-server/package.json ./apps/mcp-server/
+COPY packages/contracts/package.json ./packages/contracts/
 
 # Install Node dependencies
 RUN npm ci
@@ -22,6 +23,9 @@ RUN cd apps/whatsapp-engine && npm run build
 # Copy mcp-server source code and build
 COPY apps/mcp-server/ ./apps/mcp-server/
 RUN cd apps/mcp-server && npx tsc
+
+# Copy packages
+COPY packages/ ./packages/
 
 
 # ==========================================
@@ -43,11 +47,16 @@ RUN cd apps/api && cargo build --release
 # ==========================================
 FROM node:20-bookworm-slim
 
-# Install runtime system dependencies (OpenSSL, CA Certificates, SQLite3)
+# Install runtime system dependencies (OpenSSL, CA Certificates, SQLite3, Chromium for WhatsApp Web)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     ca-certificates \
     sqlite3 \
+    curl \
+    chromium \
+    fonts-liberation \
+    libasound2 \
+    libnss3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -70,6 +79,10 @@ ENV DATABASE_URL=sqlite:/app/data/velurix.db
 ENV ENGINE_DATA_DIR=/app/data/sessions
 ENV ENGINE_SCRIPT_PATH=/app/apps/whatsapp-engine/dist/index.js
 ENV MCP_SERVER_PATH=/app/apps/mcp-server/dist/index.js
+ENV ENGINE_TYPE=baileys
+ENV CHROME_PATH=/usr/bin/chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_HEADLESS=true
 ENV RUST_LOG=info,velurix_api=debug
 
 # Expose backend API and WebSocket port

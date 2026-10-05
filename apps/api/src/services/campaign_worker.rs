@@ -2,6 +2,7 @@ use crate::engine::manager::EngineManager;
 use crate::engine::protocol::IncomingMessage;
 use crate::errors::AppError;
 use crate::models::campaign::{CampaignAntiBanConfig, CampaignRecipient, CampaignStep};
+use crate::services::account_health_service::{AccountHealthService, SafetyCheckResult};
 use crate::services::blacklist_service::BlacklistService;
 use crate::services::contact_service::ContactService;
 use crate::services::spintax_service::SpintaxResolver;
@@ -143,6 +144,28 @@ impl CampaignWorker {
             let mut session_index = 0;
 
             for recipient in due_recipients {
+                // Immediate halt check: verify campaign is still RUNNING before each recipient
+                let current_campaign_status: Option<(String,)> = sqlx::query_as(
+                    "SELECT status FROM campaigns WHERE id = ?",
+                )
+                .bind(&campaign_id)
+                .fetch_optional(pool)
+                .await?;
+
+                if let Some((status,)) = current_campaign_status {
+                    if status != "RUNNING" {
+                        tracing::info!(
+                            campaign_id = %campaign_id,
+                            status = %status,
+                            "Campaign is no longer RUNNING (now {}). Halting recipient loop immediately.",
+                            status
+                        );
+                        break;
+                    }
+                } else {
+                    break;
+                }
+
                 // Check blacklist
                 if BlacklistService::check(pool, &recipient.phone_number).await? {
                     let log_id = format!("log_{}", Uuid::new_v4());
@@ -280,13 +303,15 @@ impl CampaignWorker {
                     continue;
                 }
 
-                // Pick an available session that hasn't exceeded warmup limit
+                // Pick an available session that hasn't exceeded warmup limit and has safe health metrics
                 let mut chosen_session_id = None;
+                let mut chosen_delay_multiplier = 1.0;
+
                 for _ in 0..ready_session_ids.len() {
                     let sess_id = &ready_session_ids[session_index % ready_session_ids.len()].0;
                     session_index += 1;
 
-                    if WarmupManager::can_send_message(
+                    if !WarmupManager::can_send_message(
                         pool,
                         sess_id,
                         config.max_messages_per_session_per_day,
@@ -294,43 +319,37 @@ impl CampaignWorker {
                     )
                     .await?
                     {
-                        chosen_session_id = Some(sess_id.clone());
-                        break;
+                        continue;
+                    }
+
+                    match AccountHealthService::check_dispatch_safety(pool, sess_id).await? {
+                        SafetyCheckResult::Proceed { delay_multiplier } => {
+                            chosen_session_id = Some(sess_id.clone());
+                            chosen_delay_multiplier = delay_multiplier;
+                            break;
+                        }
+                        SafetyCheckResult::PauseForCooldown { reason, unreplied_streak } => {
+                            tracing::warn!(
+                                session_id = %sess_id,
+                                streak = unreplied_streak,
+                                campaign_id = %campaign_id,
+                                "Session temporarily skipped for outreach safety: {}",
+                                reason
+                            );
+                        }
                     }
                 }
 
                 let session_id = match chosen_session_id {
                     Some(s) => s,
                     None => {
-                        tracing::warn!(campaign_id = %campaign_id, "All READY sessions have hit their daily warm-up/message limit");
+                        tracing::warn!(
+                            campaign_id = %campaign_id,
+                            "All READY sessions have reached daily limits or require anti-ban cooldown"
+                        );
                         break; // Break out of recipient loop for this campaign iteration
                     }
                 };
-
-                // Anti-ban delay jitter
-                if config.max_delay_sec > 0 && config.max_delay_sec >= config.min_delay_sec {
-                    let delay_sec = {
-                        let mut rng = rand::thread_rng();
-                        rng.gen_range(config.min_delay_sec..=config.max_delay_sec)
-                    };
-                    if delay_sec > 0 {
-                        tokio::time::sleep(StdDuration::from_secs(delay_sec as u64)).await;
-                    }
-                }
-
-                // Presence typing simulation
-                if config.typing_duration_sec > 0 {
-                    let _ = engine_manager
-                        .simulate_presence(
-                            &session_id,
-                            &recipient.jid,
-                            "composing",
-                            Some((config.typing_duration_sec * 1000) as u64),
-                        )
-                        .await;
-                    tokio::time::sleep(StdDuration::from_secs(config.typing_duration_sec as u64))
-                        .await;
-                }
 
                 // Spintax & Variable resolution (supports per-recipient custom messages from CSV/Excel)
                 let custom_vars_json: Option<serde_json::Value> = recipient
@@ -373,6 +392,71 @@ impl CampaignWorker {
                 } else {
                     SpintaxResolver::interpolate_variables(template_to_use, custom_vars_json.as_ref())
                 };
+
+                // Anti-ban delay jitter with micro-variance & dynamic throttle multiplier
+                if config.max_delay_sec > 0 && config.max_delay_sec >= config.min_delay_sec {
+                    let total_delay_ms = {
+                        let mut rng = rand::thread_rng();
+                        let min_ms = (config.min_delay_sec * 1000) as u64;
+                        let max_ms = (config.max_delay_sec * 1000) as u64;
+                        let raw_ms = rng.gen_range(min_ms..=max_ms);
+                        let micro_jitter = rng.gen_range(100..=900);
+                        ((raw_ms + micro_jitter) as f64 * chosen_delay_multiplier) as u64
+                    };
+                    if total_delay_ms > 0 {
+                        tokio::time::sleep(StdDuration::from_millis(total_delay_ms)).await;
+                    }
+                }
+
+                // Presence typing simulation (natural human typing speed proportional to body length)
+                if config.typing_duration_sec > 0 {
+                    let char_count = body.chars().count();
+                    let think_pause_ms = rand::thread_rng().gen_range(300..=800);
+                    tokio::time::sleep(StdDuration::from_millis(think_pause_ms)).await;
+
+                    let typing_duration_ms = {
+                        let mut rng = rand::thread_rng();
+                        let char_ms = (char_count as u64) * 28;
+                        let jitter_ms = rng.gen_range(400..=1200);
+                        let calculated_ms = char_ms + jitter_ms;
+
+                        let max_bound = (config.typing_duration_sec * 1000).max(4500) as u64;
+                        calculated_ms.clamp(1200, max_bound)
+                    };
+
+                    let _ = engine_manager
+                        .simulate_presence(
+                            &session_id,
+                            &recipient.jid,
+                            "composing",
+                            Some(typing_duration_ms),
+                        )
+                        .await;
+                    tokio::time::sleep(StdDuration::from_millis(typing_duration_ms)).await;
+                }
+
+                // Verify campaign is still RUNNING right before dispatching the message (in case user paused during anti-ban delay)
+                let current_campaign_status_before_send: Option<(String,)> = sqlx::query_as(
+                    "SELECT status FROM campaigns WHERE id = ?",
+                )
+                .bind(&campaign_id)
+                .fetch_optional(pool)
+                .await?;
+
+                if let Some((status,)) = current_campaign_status_before_send {
+                    if status != "RUNNING" {
+                        tracing::info!(
+                            campaign_id = %campaign_id,
+                            status = %status,
+                            "Campaign is no longer RUNNING (now {}). Aborting message dispatch to {}.",
+                            status,
+                            recipient.phone_number
+                        );
+                        break;
+                    }
+                } else {
+                    break;
+                }
 
                 // Execute sending
                 let message_id = format!("msg_{}", Uuid::new_v4());

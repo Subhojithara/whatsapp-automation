@@ -60,7 +60,8 @@ export function CampaignDetailModal({
   };
 
   const handleExport = () => {
-    window.open(`http://localhost:8080/api/v1/campaigns/${currentCampaign.id}/export?format=csv`, "_blank");
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+    window.open(`${apiBase}/campaigns/${currentCampaign.id}/export?format=csv`, "_blank");
   };
 
   const progressPct =

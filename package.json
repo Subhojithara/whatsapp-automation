@@ -1,6 +1,10 @@
 {
   "name": "velurix-monorepo",
   "private": true,
+  "type": "module",
+  "scripts": {
+    "test:docker:e2e": "node scripts/test-docker-backend-e2e.js"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"

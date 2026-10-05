@@ -7,6 +7,7 @@ export interface BaseCommand {
 export interface StartCommand extends BaseCommand {
   cmd: 'engine.start';
   authDir: string;
+  engineType?: string;
 }
 
 export interface StopCommand extends BaseCommand {
@@ -55,6 +56,11 @@ export interface SimulatePresenceCommand extends BaseCommand {
   duration_ms?: number;
 }
 
+export interface SetPresenceCommand extends BaseCommand {
+  cmd: 'engine.set_presence';
+  presence: 'available' | 'unavailable';
+}
+
 export type IncomingCommand =
   | StartCommand
   | StopCommand
@@ -66,7 +72,8 @@ export type IncomingCommand =
   | GetChatMessagesCommand
   | GetProfilePictureCommand
   | ValidatePhonesCommand
-  | SimulatePresenceCommand;
+  | SimulatePresenceCommand
+  | SetPresenceCommand;
 
 export interface GetContactsCommand extends BaseCommand {
   cmd: 'engine.get_contacts';

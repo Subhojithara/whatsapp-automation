@@ -180,7 +180,7 @@ impl SessionService {
                         tracing::info!(session_id = %session.id, creds_path = %auth_creds_path.display(), "Recovering authenticated session...");
                         let auth_dir = auth_dir_path.to_string_lossy().to_string();
                         let _ = Self::update_status(pool, &session.id, SessionStatus::Starting, None).await;
-                        let _ = engine_manager.start_session(session.id, auth_dir).await;
+                        let _ = engine_manager.start_session(session.id, auth_dir, Some(session.engine)).await;
                     } else {
                         tracing::info!(session_id = %session.id, creds_path = %auth_creds_path.display(), "Session has no auth creds, resetting status to STOPPED");
                         let _ = Self::update_status(pool, &session.id, SessionStatus::Stopped, None).await;

@@ -3,6 +3,12 @@ import { IncomingCommand, emitEvent } from './protocol.js';
 import { WebJsEngineSocket } from './wwebjs-socket.js';
 import { EngineSocket } from './socket.js';
 
+// Redirect console.log and console.info to stderr.
+// 3rd party libs like libsignal write debug messages (e.g. "Closing session: ...") via console.info,
+// which would otherwise corrupt the newline-delimited JSON IPC protocol on process.stdout.
+console.log = (...args: any[]) => console.error(...args);
+console.info = (...args: any[]) => console.error(...args);
+
 const engineType = process.env.ENGINE_TYPE || 'baileys';
 console.error(`[Engine Process] Started stdio listener (${engineType} engine).`);
 
@@ -39,7 +45,8 @@ async function processCommand(line: string): Promise<void> {
         if (activeSocket) {
           await activeSocket.stop();
         }
-        if (engineType === 'wwebjs') {
+        const requestedEngine = (cmd as any).engineType || (cmd as any).engine || engineType;
+        if (requestedEngine === 'wwebjs') {
           console.error(`[Engine Process] Starting WebJsEngineSocket (Puppeteer) for ${cmd.sessionId}`);
           activeSocket = new WebJsEngineSocket(cmd.sessionId);
         } else {
@@ -105,27 +112,42 @@ async function processCommand(line: string): Promise<void> {
 
       case 'engine.get_contacts': {
         if (activeSocket) {
-          await activeSocket.getContacts();
+          try {
+            await activeSocket.getContacts();
+          } catch (e: any) {
+            console.error(`[Engine Process] get_contacts error: ${e?.message}`);
+            emitEvent('contacts.synced', cmd.sessionId, { contacts: [] });
+          }
         } else {
-          emitEvent('session.failed', cmd.sessionId, { error: 'Session socket not initialized' });
+          emitEvent('contacts.synced', cmd.sessionId, { contacts: [] });
         }
         break;
       }
 
       case 'engine.get_chats': {
         if (activeSocket) {
-          await activeSocket.getChats();
+          try {
+            await activeSocket.getChats();
+          } catch (e: any) {
+            console.error(`[Engine Process] get_chats error: ${e?.message}`);
+            emitEvent('chats.synced', cmd.sessionId, { chats: [] });
+          }
         } else {
-          emitEvent('session.failed', cmd.sessionId, { error: 'Session socket not initialized' });
+          emitEvent('chats.synced', cmd.sessionId, { chats: [] });
         }
         break;
       }
 
       case 'engine.get_chat_messages': {
         if (activeSocket) {
-          await activeSocket.getChatMessages(cmd.jid, cmd.limit ?? 50);
+          try {
+            await activeSocket.getChatMessages(cmd.jid, cmd.limit ?? 50);
+          } catch (e: any) {
+            console.error(`[Engine Process] get_chat_messages error: ${e?.message}`);
+            emitEvent('chat.messages', cmd.sessionId, { jid: cmd.jid, messages: [] });
+          }
         } else {
-          emitEvent('session.failed', cmd.sessionId, { error: 'Session socket not initialized' });
+          emitEvent('chat.messages', cmd.sessionId, { jid: cmd.jid, messages: [] });
         }
         break;
       }
@@ -163,16 +185,20 @@ async function processCommand(line: string): Promise<void> {
         break;
       }
 
+      case 'engine.set_presence': {
+        if (activeSocket && typeof activeSocket.setPresence === 'function') {
+          await activeSocket.setPresence(cmd.presence);
+        }
+        break;
+      }
+
       default:
         console.error(`[Engine Process] Unknown command: ${(cmd as any).cmd}`);
     }
   } catch (err: any) {
     console.error(`[Engine Process] Command execution error:`, err);
-    if (currentSessionId) {
-      emitEvent('session.failed', currentSessionId, {
-        error: err?.message || 'Engine command execution failed',
-      });
-    }
+    // Routine command execution errors should not kill the entire WhatsApp session.
+    // Real disconnection is handled via connection.update listeners inside the socket implementations.
   }
 }
 

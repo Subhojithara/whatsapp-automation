@@ -16,6 +16,7 @@ impl EngineClient {
     pub async fn spawn(
         session_id: String,
         auth_dir: String,
+        engine_type: Option<String>,
         engine_script_path: String,
         event_sender: mpsc::Sender<EngineEvent>,
     ) -> Result<Self, AppError> {
@@ -70,6 +71,12 @@ impl EngineClient {
                     continue;
                 }
 
+                // If non-JSON output reaches stdout (e.g. from 3rd party native bindings), log as raw stdout and skip
+                if !trimmed.starts_with('{') || !trimmed.ends_with('}') {
+                    tracing::info!(session_id = %session_id_out, "[Node STDOUT Raw] {}", trimmed);
+                    continue;
+                }
+
                 match serde_json::from_str::<EngineEvent>(trimmed) {
                     Ok(event) => {
                         let _ = event_sender.send(event).await;
@@ -97,6 +104,7 @@ impl EngineClient {
         let start_cmd = EngineCommand::Start {
             session_id: session_id.clone(),
             auth_dir,
+            engine_type,
             v: 1,
         };
         client.send_command(&start_cmd).await?;

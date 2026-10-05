@@ -68,16 +68,17 @@ pub async fn get_chat_messages(
     let limit = query.limit.unwrap_or(50).max(1).min(200);
     let offset = query.offset.unwrap_or(0).max(0);
 
-    if engine_manager.is_running(&session_id).await {
-        let _ = engine_manager
-            .get_chat_messages(&session_id, &chat_id, Some(limit as u32))
-            .await;
-    }
-
     let _ = ChatService::mark_chat_read(&pool, &session_id, &chat_id).await;
 
     let messages =
         MessageService::list_messages(&pool, &session_id, &chat_id, limit, offset).await?;
+
+    // Only query engine if local database has no messages yet for this chat
+    if messages.is_empty() && offset == 0 && engine_manager.is_running(&session_id).await {
+        let _ = engine_manager
+            .get_chat_messages(&session_id, &chat_id, Some(limit as u32))
+            .await;
+    }
 
     Ok(HttpResponse::Ok().json(ApiSuccessEnvelope {
         success: true,

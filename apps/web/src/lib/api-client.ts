@@ -2,10 +2,21 @@ import { ApiResponse, Session } from '@/types/session';
 import { MessageResponse, SendTextRequest } from '@/types/message';
 import { Contact, Chat, Message } from '@/types/chat';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+const rawApiBase = process.env.NEXT_PUBLIC_API_URL || 'https://213-136-76-153.sslip.io/api/v1';
+const cleanBase = rawApiBase.replace(/\/+$/, '');
+const API_BASE = cleanBase.endsWith('/api/v1') ? cleanBase : `${cleanBase}/api/v1`;
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  let targetUrl = url;
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    if (targetUrl.includes('213.136.76.153:8090')) {
+      targetUrl = targetUrl.replace('http://213.136.76.153:8090', 'https://213-136-76-153.sslip.io');
+    } else if (targetUrl.startsWith('http://')) {
+      targetUrl = targetUrl.replace(/^http:\/\//, 'https://');
+    }
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options?.headers as Record<string, string>),
@@ -15,7 +26,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     headers['X-API-Key'] = API_KEY;
   }
 
-  const res = await fetch(url, {
+  const res = await fetch(targetUrl, {
     ...options,
     headers,
   });
@@ -41,6 +52,19 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 export const apiClient = {
   getSessions: () => fetchJson<Session[]>(`${API_BASE}/sessions`),
   getSession: (id: string) => fetchJson<Session>(`${API_BASE}/sessions/${id}`),
+  getSessionHealth: (id: string) =>
+    fetchJson<{
+      sessionId: string;
+      outgoingToday: number;
+      incomingToday: number;
+      outgoingLast24h: number;
+      incomingLast24h: number;
+      unrepliedOutboundStreak: number;
+      healthScore: number;
+      riskLevel: string;
+      throttleMultiplier: number;
+      recommendation: string;
+    }>(`${API_BASE}/sessions/${id}/health`),
   createSession: (name: string, engine = 'baileys') =>
     fetchJson<Session>(`${API_BASE}/sessions`, {
       method: 'POST',

@@ -1,5 +1,5 @@
 import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg;
+const { Client, LocalAuth, MessageMedia } = pkg;
 import puppeteerExtra from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import QRCode from 'qrcode';
@@ -14,6 +14,37 @@ puppeteer.use(stealth);
 export class WebJsEngineSocket {
   private client: any = null;
   private sessionId: string;
+  private idlePresenceTimer: NodeJS.Timeout | null = null;
+
+  public resetIdlePresence(delayMs = 8000): void {
+    if (this.idlePresenceTimer) {
+      clearTimeout(this.idlePresenceTimer);
+    }
+    this.idlePresenceTimer = setTimeout(async () => {
+      try {
+        if (this.client) {
+          console.error(`[WebJS Engine] Session ${this.sessionId} transitioned to idle -> 'unavailable'`);
+          await this.client.sendPresenceUnavailable();
+        }
+      } catch (e: any) {
+        console.error(`[WebJS Engine] Idle presence update warning: ${e?.message}`);
+      }
+    }, delayMs);
+  }
+
+  async setPresence(presence: 'available' | 'unavailable'): Promise<void> {
+    if (!this.client) return;
+    try {
+      console.error(`[WebJS Engine] Setting presence to '${presence}' for ${this.sessionId}`);
+      if (presence === 'available') {
+        await this.client.sendPresenceAvailable();
+      } else {
+        await this.client.sendPresenceUnavailable();
+      }
+    } catch (e: any) {
+      console.error(`[WebJS Engine] Failed to set presence: ${e?.message}`);
+    }
+  }
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
@@ -25,8 +56,21 @@ export class WebJsEngineSocket {
       return process.env.CHROME_PATH;
     }
 
+    const linuxCandidates = [
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/google-chrome',
+    ];
+    for (const cand of linuxCandidates) {
+      if (fs.existsSync(cand)) {
+        console.error(`[WebJS Engine] Using system Linux browser: ${cand}`);
+        return cand;
+      }
+    }
+
     // Check Puppeteer cache directory first
-    const cacheHome = process.env.PUPPETEER_CACHE_DIR || path.join(process.env.USERPROFILE || '', '.cache', 'puppeteer');
+    const cacheHome = process.env.PUPPETEER_CACHE_DIR || path.join(process.env.USERPROFILE || process.env.HOME || '', '.cache', 'puppeteer');
     const chromeDir = path.join(cacheHome, 'chrome');
     if (fs.existsSync(chromeDir)) {
       try {
@@ -91,6 +135,13 @@ export class WebJsEngineSocket {
 
     this.client.on('ready', async () => {
       console.error(`[WebJS Engine] Session ${this.sessionId} connected READY!`);
+      try {
+        await this.client.sendPresenceUnavailable();
+        console.error(`[WebJS Engine] Session ${this.sessionId} initial presence set to 'unavailable' (anti-ban protection)`);
+      } catch (e: any) {
+        console.error(`[WebJS Engine] Failed to set initial unavailable presence: ${e?.message}`);
+      }
+
       const info = this.client.info;
       const phoneNumber = info?.wid?.user || undefined;
       const displayName = info?.pushname || info?.wid?.user || undefined;
@@ -131,6 +182,7 @@ export class WebJsEngineSocket {
 
     const executablePath = this.findExecutablePath();
 
+    const isHeadless = process.env.PUPPETEER_HEADLESS !== 'false';
     const clientOptions: any = {
       authStrategy: new LocalAuth({
         clientId: this.sessionId,
@@ -140,7 +192,7 @@ export class WebJsEngineSocket {
         type: 'none',
       },
       puppeteer: {
-        headless: false,
+        headless: isHeadless,
         executablePath,
         handleSIGINT: false,
         handleSIGTERM: false,
@@ -199,6 +251,10 @@ export class WebJsEngineSocket {
   }
 
   async stop(): Promise<void> {
+    if (this.idlePresenceTimer) {
+      clearTimeout(this.idlePresenceTimer);
+      this.idlePresenceTimer = null;
+    }
     if (this.client) {
       try {
         await this.client.destroy();
@@ -208,6 +264,25 @@ export class WebJsEngineSocket {
       this.client = null;
     }
     emitEvent('session.stopped', this.sessionId);
+  }
+
+  async requestPairingCode(phoneNumber: string): Promise<string> {
+    if (!this.client) {
+      throw new Error('Engine client not initialized');
+    }
+    try {
+      if (typeof (this.client as any).requestPairingCode === 'function') {
+        const cleanedNumber = phoneNumber.replace(/[^0-9]/g, '');
+        const code = await (this.client as any).requestPairingCode(cleanedNumber);
+        emitEvent('session.pairing_code', this.sessionId, { code });
+        return code;
+      } else {
+        throw new Error('Pairing code is not supported by WebJS engine. Please scan the QR code instead.');
+      }
+    } catch (err: any) {
+      emitEvent('session.failed', this.sessionId, { error: err?.message || 'Failed to request pairing code' });
+      throw err;
+    }
   }
 
   async sendText(chatId: string, text: string, messageId: string): Promise<void> {
@@ -254,6 +329,107 @@ export class WebJsEngineSocket {
         messageId,
         error: err?.message || 'Failed to send text message',
       });
+    } finally {
+      this.resetIdlePresence();
+    }
+  }
+
+  async sendMedia(
+    chatId: string,
+    mediaType: 'image' | 'audio' | 'video' | 'document' | 'sticker',
+    mediaBufferOrUrl: string,
+    caption?: string,
+    fileName?: string,
+    mimetype?: string,
+    messageId?: string
+  ): Promise<void> {
+    if (!this.client) {
+      const err = `Engine not ready for session ${this.sessionId}`;
+      if (messageId) {
+        emitEvent('message.failed', this.sessionId, { messageId, error: err });
+      }
+      return;
+    }
+
+    const trimmedChatId = chatId.trim();
+    let targetJid: string;
+
+    if (trimmedChatId.endsWith('@g.us')) {
+      targetJid = trimmedChatId;
+    } else {
+      const cleanNumber = trimmedChatId.replace(/[^0-9]/g, '');
+      targetJid = `${cleanNumber}@c.us`;
+
+      try {
+        const numberId = await this.client.getNumberId(cleanNumber);
+        if (numberId?._serialized) {
+          targetJid = numberId._serialized;
+        }
+      } catch (e) {}
+    }
+
+    try {
+      let media: any;
+      if (mediaBufferOrUrl.startsWith('data:')) {
+        const parts = mediaBufferOrUrl.split(',');
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        const mime = mimetype || (mimeMatch ? mimeMatch[1] : 'application/octet-stream');
+        const b64 = parts[1];
+        media = new MessageMedia(mime, b64, fileName || 'file');
+      } else if (mediaBufferOrUrl.startsWith('http://') || mediaBufferOrUrl.startsWith('https://')) {
+        media = await MessageMedia.fromUrl(mediaBufferOrUrl, { unsafeMime: true });
+      } else if (fs.existsSync(mediaBufferOrUrl)) {
+        media = MessageMedia.fromFilePath(mediaBufferOrUrl);
+      } else {
+        throw new Error('Invalid media input data');
+      }
+
+      const options: any = { caption };
+      if (mediaType === 'audio') {
+        options.sendAudioAsVoice = true;
+      } else if (mediaType === 'sticker') {
+        options.sendMediaAsSticker = true;
+      }
+
+      const msg = await this.client.sendMessage(targetJid, media, options);
+      const externalId = msg?.id?.id || msg?.id?._serialized || undefined;
+
+      console.error(`[WebJS Engine] Media ${messageId} sent successfully to ${targetJid}, externalId: ${externalId}`);
+      if (messageId) {
+        emitEvent('message.sent', this.sessionId, {
+          messageId,
+          externalId,
+        });
+      }
+    } catch (err: any) {
+      console.error(`[WebJS Engine] Failed to send media ${messageId} to ${targetJid}: ${err?.message}`);
+      if (messageId) {
+        emitEvent('message.failed', this.sessionId, {
+          messageId,
+          error: err?.message || 'Failed to send media message',
+        });
+      }
+    } finally {
+      this.resetIdlePresence();
+    }
+  }
+
+  async getProfilePicture(jid: string): Promise<void> {
+    if (!this.client) {
+      emitEvent('contact.profile_picture', this.sessionId, { jid, avatarUrl: null });
+      return;
+    }
+    try {
+      let cleanJid = jid.trim();
+      if (cleanJid.endsWith('@s.whatsapp.net')) {
+        cleanJid = cleanJid.replace('@s.whatsapp.net', '@c.us');
+      } else if (!cleanJid.includes('@')) {
+        cleanJid = `${cleanJid.replace(/\D/g, '')}@c.us`;
+      }
+      const avatarUrl = await this.client.getProfilePicUrl(cleanJid);
+      emitEvent('contact.profile_picture', this.sessionId, { jid, avatarUrl: avatarUrl || null });
+    } catch (e: any) {
+      emitEvent('contact.profile_picture', this.sessionId, { jid, avatarUrl: null });
     }
   }
 
@@ -286,17 +462,34 @@ export class WebJsEngineSocket {
 
   async getChatMessages(jid: string, limit: number = 50): Promise<void> {
     if (!this.client) throw new Error('WebJS client not initialized');
-    const chat = await this.client.getChatById(jid);
-    const msgs = await chat.fetchMessages({ limit });
-    const messages = (msgs || []).map((m: any) => ({
-      id: m.id?.id || String(Date.now()),
-      jid: m.from,
-      senderJid: m.author || m.from,
-      body: m.body || '',
-      timestamp: new Date(m.timestamp * 1000).toISOString(),
-      fromMe: m.fromMe || false,
-    }));
-    emitEvent('chat.messages', this.sessionId, { jid, messages });
+    let targetJid = jid.trim();
+    if (targetJid.endsWith('@s.whatsapp.net')) {
+      targetJid = targetJid.replace('@s.whatsapp.net', '@c.us');
+    } else if (!targetJid.endsWith('@c.us') && !targetJid.endsWith('@g.us')) {
+      const cleanNumber = targetJid.replace(/[^0-9]/g, '');
+      targetJid = `${cleanNumber}@c.us`;
+    }
+
+    try {
+      const chat = await this.client.getChatById(targetJid);
+      if (!chat) {
+        emitEvent('chat.messages', this.sessionId, { jid, messages: [] });
+        return;
+      }
+      const msgs = await chat.fetchMessages({ limit });
+      const messages = (msgs || []).map((m: any) => ({
+        id: m.id?.id || String(Date.now()),
+        jid: m.from || jid,
+        senderJid: m.author || m.from || jid,
+        body: m.body || '',
+        timestamp: m.timestamp ? new Date(m.timestamp * 1000).toISOString() : new Date().toISOString(),
+        fromMe: m.fromMe || false,
+      }));
+      emitEvent('chat.messages', this.sessionId, { jid, messages });
+    } catch (err: any) {
+      console.error(`[WebJS Engine] Failed to get chat messages for ${targetJid}: ${err?.message}`);
+      emitEvent('chat.messages', this.sessionId, { jid, messages: [] });
+    }
   }
 
   async validatePhones(phoneNumbers: string[]): Promise<void> {
@@ -367,6 +560,8 @@ export class WebJsEngineSocket {
         state,
         success: false,
       });
+    } finally {
+      this.resetIdlePresence();
     }
   }
 }

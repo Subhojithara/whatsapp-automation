@@ -48,9 +48,9 @@ impl ChatService {
         pool: &SqlitePool,
         session_id: &str,
     ) -> Result<Vec<Chat>, AppError> {
-        // Automatically purge any invalid/corrupted or duplicate @lid chat records
+        // Automatically purge any invalid/corrupted chat records
         let _ = sqlx::query(
-            "DELETE FROM chats WHERE jid LIKE 'chat_%' OR jid = '0' OR jid = 'status@broadcast' OR jid LIKE '%@lid'",
+            "DELETE FROM chats WHERE jid LIKE 'chat_%' OR jid = '0' OR jid = 'status@broadcast'",
         )
         .execute(pool)
         .await;

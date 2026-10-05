@@ -113,7 +113,7 @@ impl MessageService {
             let auth_creds_path = auth_dir_path.join("creds.json");
             if auth_creds_path.exists() {
                 tracing::info!(session_id = %session_id, creds_path = %auth_creds_path.display(), "Engine process not running for READY session, auto-starting engine...");
-                engine_manager.start_session(session_id.to_string(), auth_dir_path.to_string_lossy().to_string()).await?;
+                engine_manager.start_session(session_id.to_string(), auth_dir_path.to_string_lossy().to_string(), Some(session.engine.clone())).await?;
 
                 // Wait for the engine to actually connect to WhatsApp (up to 15 seconds)
                 let max_wait = Duration::from_secs(15);

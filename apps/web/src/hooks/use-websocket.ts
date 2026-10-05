@@ -3,7 +3,32 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080/ws';
+function getWsUrl(): string {
+  let url = process.env.NEXT_PUBLIC_WS_URL;
+  if (!url && process.env.NEXT_PUBLIC_API_URL) {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    const wsProto = apiUrl.startsWith('https') ? 'wss:' : 'ws:';
+    try {
+      const parsed = new URL(apiUrl);
+      url = `${wsProto}//${parsed.host}/ws`;
+    } catch {
+      // fallback
+    }
+  }
+  if (!url) {
+    url = 'wss://213-136-76-153.sslip.io/ws';
+  }
+
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    if (url.includes('213.136.76.153:8090')) {
+      url = 'wss://213-136-76-153.sslip.io/ws';
+    } else if (url.startsWith('ws://')) {
+      url = url.replace(/^ws:\/\//, 'wss://');
+    }
+  }
+
+  return url;
+}
 
 export function useWebSocket() {
   const queryClient = useQueryClient();
@@ -17,7 +42,8 @@ export function useWebSocket() {
 
     function connect() {
       try {
-        const ws = new WebSocket(WS_URL);
+        const url = getWsUrl();
+        const ws = new WebSocket(url);
         socketRef.current = ws;
 
         ws.onopen = () => {

@@ -15,7 +15,7 @@ import pino from 'pino';
 import * as fs from 'fs';
 import * as path from 'path';
 import QRCode from 'qrcode';
-import { getAuthState } from './auth.js';
+import { getAuthState, cleanStaleSessions, purgeSessionForJid } from './auth.js';
 import { emitEvent } from './protocol.js';
 
 export class EngineSocket {
@@ -25,6 +25,9 @@ export class EngineSocket {
   private isExplicitStop = false;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 50;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private preKeyTimer: NodeJS.Timeout | null = null;
+  private saveStoreTimer: NodeJS.Timeout | null = null;
   private messageStore = new Map<string, WAMessage>();
   private contactStore = new Map<string, BaileysContact>();
   private chatStore = new Map<string, BaileysChat>();
@@ -33,6 +36,62 @@ export class EngineSocket {
   /** In-memory LID↔PN mapping cache, populated from history sync and lid-mapping.update events */
   private lidToPn = new Map<string, string>();
   private pnToLid = new Map<string, string>();
+  private idlePresenceTimer: NodeJS.Timeout | null = null;
+
+  public resetIdlePresence(delayMs = 60000): void {
+    if (this.idlePresenceTimer) {
+      clearTimeout(this.idlePresenceTimer);
+    }
+    this.idlePresenceTimer = setTimeout(async () => {
+      try {
+        if (this.sock && this.connectionState === 'open') {
+          console.error(`[Engine Socket] Session ${this.sessionId} transitioned to idle -> 'unavailable'`);
+          await this.sock.sendPresenceUpdate('unavailable');
+        }
+      } catch (e: any) {
+        console.error(`[Engine Socket] Idle presence update warning: ${e?.message}`);
+      }
+    }, delayMs);
+  }
+
+  private checkIfSessionClosed(userOrJid: string): boolean {
+    try {
+      if (!this.authDir || !fs.existsSync(this.authDir)) return false;
+      const cleanId = userOrJid.replace(/[^0-9]/g, '');
+      if (!cleanId) return false;
+      const files = fs.readdirSync(this.authDir);
+      for (const file of files) {
+        if (file.startsWith(`session-${cleanId}`) && file.endsWith('.json')) {
+          const filePath = path.join(this.authDir, file);
+          const raw = fs.readFileSync(filePath, 'utf8');
+          const data = JSON.parse(raw);
+          const sessions = data?._sessions;
+          if (sessions && typeof sessions === 'object') {
+            const keys = Object.keys(sessions);
+            if (keys.length > 0) {
+              const allClosed = keys.every(
+                (k) => sessions[k]?.indexInfo?.closed && sessions[k].indexInfo.closed !== -1
+              );
+              if (allClosed) return true;
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return false;
+  }
+
+  async setPresence(presence: 'available' | 'unavailable'): Promise<void> {
+    if (!this.sock) return;
+    try {
+      console.error(`[Engine Socket] Setting presence to '${presence}' for ${this.sessionId}`);
+      await this.sock.sendPresenceUpdate(presence);
+    } catch (e: any) {
+      console.error(`[Engine Socket] Failed to set presence: ${e?.message}`);
+    }
+  }
 
   constructor(sessionId: string, authDir: string = '') {
     this.sessionId = sessionId;
@@ -64,15 +123,46 @@ export class EngineSocket {
 
   private saveMessageStore(): void {
     try {
-      const items = Array.from(this.messageStore.values()).slice(-1000);
+      const items = Array.from(this.messageStore.values()).slice(-2000);
       fs.writeFileSync(this.storeFilePath, JSON.stringify(items), 'utf8');
     } catch (e: any) {
       console.error(`[Engine Socket] Failed to save message_store.json for ${this.sessionId}: ${e?.message}`);
     }
   }
 
+  private scheduleSaveMessageStore(): void {
+    if (this.saveStoreTimer) return;
+    this.saveStoreTimer = setTimeout(() => {
+      this.saveStoreTimer = null;
+      this.saveMessageStore();
+    }, 1500);
+  }
+
   async start(authDir?: string): Promise<void> {
     try {
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+
+      if (this.sock) {
+        console.error(`[Engine Socket] Cleaning up existing socket before start for ${this.sessionId}`);
+        try {
+          this.sock.ev.removeAllListeners('connection.update');
+          this.sock.ev.removeAllListeners('creds.update');
+          this.sock.ev.removeAllListeners('messages.upsert');
+          this.sock.ev.removeAllListeners('messages.update');
+          this.sock.ev.removeAllListeners('contacts.upsert');
+          this.sock.ev.removeAllListeners('chats.upsert');
+          this.sock.ev.removeAllListeners('messaging-history.set');
+          this.sock.end(undefined);
+          this.sock.ws?.close();
+        } catch (e: any) {
+          console.error(`[Engine Socket] Cleanup warning: ${e?.message}`);
+        }
+        this.sock = null;
+      }
+
       if (authDir) {
         this.authDir = authDir;
       }
@@ -98,18 +188,61 @@ export class EngineSocket {
         auth: state,
         printQRInTerminal: false,
         logger: logger as any,
-        browser: Browsers.macOS('Desktop'),
-        keepAliveIntervalMs: 15000,
-        connectTimeoutMs: 30000,
-        defaultQueryTimeoutMs: 30000,
+        browser: Browsers.ubuntu('Chrome'),
+        keepAliveIntervalMs: 25000,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 60000,
         generateHighQualityLinkPreview: true,
-        shouldSyncHistoryMessage: () => true,
+        shouldSyncHistoryMessage: (msg: any) => {
+          // Allow INITIAL_BOOTSTRAP and RECENT so Baileys can load LID<->PN mappings,
+          // recent chats, and contacts without loading gigabytes of years-old messages.
+          const syncType = msg?.syncType;
+          return syncType !== 2; // 2 is HistorySyncType.FULL
+        },
         syncFullHistory: false,
-        markOnlineOnConnect: true,
-        getMessage: async (key) => {
+        enableAutoSessionRecreation: true,
+        enableRecentMessageCache: true,
+        maxMsgRetryCount: 5,
+        markOnlineOnConnect: false,
+        getMessage: async (key: any) => {
           if (!key.id) return undefined;
-          const cached = this.messageStore.get(key.id);
-          return cached?.message || undefined;
+          console.error(`[Engine Socket] getMessage called for: id=${key.id}, remoteJid=${key.remoteJid}, fromMe=${key.fromMe}`);
+
+          // Extend presence while handling retries so connection doesn't drop to unavailable mid-handshake
+          this.resetIdlePresence(60000);
+
+          // 1. Direct key.id lookup
+          let cached: any = this.messageStore.get(key.id);
+
+          // 2. Device prefix stripping (e.g., '3EB0...:1@s.whatsapp.net')
+          if (!cached && key.id.includes(':')) {
+            const parts = key.id.split(':');
+            const bareId = parts[parts.length - 1];
+            if (bareId) cached = this.messageStore.get(bareId);
+          }
+
+          // 3. Fallback search across cached keys
+          if (!cached) {
+            for (const [k, v] of this.messageStore.entries()) {
+              if (k.endsWith(key.id) || key.id.endsWith(k) || (v?.key?.id && (v.key.id === key.id || key.id.includes(v.key.id)))) {
+                cached = v;
+                break;
+              }
+            }
+          }
+
+          if (cached?.message) {
+            console.error(`[Engine Socket] getMessage resolved payload for ${key.id}`);
+            return cached.message;
+          }
+
+          if (cached?.body) {
+            console.error(`[Engine Socket] getMessage synthesized conversation payload for ${key.id}`);
+            return { conversation: cached.body };
+          }
+
+          console.warn(`[Engine Socket] getMessage payload not found for key.id=${key.id}`);
+          return undefined;
         },
       });
 
@@ -122,9 +255,10 @@ export class EngineSocket {
               this.cacheMessage(msg.key.id, msg);
             }
             const rawJid = msg.key?.remoteJid || '';
-            const mappedPn = rawJid.endsWith('@lid') ? this.lidToPn.get(rawJid) : undefined;
-            const jid = mappedPn ? (mappedPn.endsWith('@s.whatsapp.net') ? mappedPn : `${mappedPn}@s.whatsapp.net`) : rawJid;
-            const senderJid = msg.key?.participant || jid;
+            const normalizedRawJid = jidNormalizedUser(rawJid);
+            const mappedPn = normalizedRawJid.endsWith('@lid') ? this.lidToPn.get(normalizedRawJid) : undefined;
+            const jid = mappedPn ? (mappedPn.endsWith('@s.whatsapp.net') ? mappedPn : `${mappedPn}@s.whatsapp.net`) : normalizedRawJid;
+            const senderJid = jidNormalizedUser(msg.key?.participant || jid);
             const timestamp = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
 
             if (jid) {
@@ -227,6 +361,25 @@ export class EngineSocket {
         }
       });
 
+      let contactsSyncTimer: NodeJS.Timeout | null = null;
+      let chatsSyncTimer: NodeJS.Timeout | null = null;
+
+      const scheduleEmitContacts = () => {
+        if (contactsSyncTimer) clearTimeout(contactsSyncTimer);
+        contactsSyncTimer = setTimeout(() => {
+          contactsSyncTimer = null;
+          this.getContacts().catch((err) => console.error('[Engine Socket] Error emitting contacts:', err));
+        }, 1500);
+      };
+
+      const scheduleEmitChats = () => {
+        if (chatsSyncTimer) clearTimeout(chatsSyncTimer);
+        chatsSyncTimer = setTimeout(() => {
+          chatsSyncTimer = null;
+          this.getChats().catch((err) => console.error('[Engine Socket] Error emitting chats:', err));
+        }, 1500);
+      };
+
       // Capture LID↔PN mappings and store contacts from contacts events
       const processContacts = (contacts: Partial<BaileysContact>[]) => {
         for (const c of contacts) {
@@ -239,6 +392,7 @@ export class EngineSocket {
             this.addLidMapping(c.lid, phone);
           }
         }
+        scheduleEmitContacts();
       };
 
       const processChats = (chats: Partial<BaileysChat>[]) => {
@@ -248,6 +402,7 @@ export class EngineSocket {
             this.chatStore.set(chat.id, { ...existing, ...chat } as BaileysChat);
           }
         }
+        scheduleEmitChats();
       };
 
       this.sock.ev.on('contacts.upsert', (contacts) => processContacts(contacts));
@@ -279,6 +434,9 @@ export class EngineSocket {
             }
           }
         }
+        console.error(`[Engine Socket] History sync complete. Emitting contacts and chats for ${this.sessionId}...`);
+        this.getContacts().catch((err) => console.error('[Engine Socket] Error emitting contacts on history set:', err));
+        this.getChats().catch((err) => console.error('[Engine Socket] Error emitting chats on history set:', err));
       });
 
       // Capture live LID↔PN mapping updates pushed by WhatsApp
@@ -316,6 +474,14 @@ export class EngineSocket {
           console.error(`[Engine Socket] Session ${this.sessionId} connected READY!`);
           this.reconnectAttempts = 0;
 
+          // Anti-ban protection: immediately set presence to unavailable so VPS does not stay online 24/7
+          try {
+            await this.sock?.sendPresenceUpdate('unavailable');
+            console.error(`[Engine Socket] Session ${this.sessionId} initial presence set to 'unavailable' (anti-ban protection)`);
+          } catch (e: any) {
+            console.error(`[Engine Socket] Initial presence update warning: ${e?.message}`);
+          }
+
           // Force registered: true and persist creds when connection is open
           if (state && state.creds && !state.creds.registered) {
             state.creds.registered = true;
@@ -327,6 +493,32 @@ export class EngineSocket {
             }
           }
 
+          // Proactively upload pre-keys to avoid 'Waiting for this message' on recipients
+          try {
+            await this.sock?.uploadPreKeysToServerIfRequired();
+            console.error(`[Engine Socket] Pre-keys verified and uploaded if required for ${this.sessionId}`);
+          } catch (e: any) {
+            console.error(`[Engine Socket] uploadPreKeysToServerIfRequired error: ${e?.message}`);
+          }
+
+          if (!this.preKeyTimer) {
+            this.preKeyTimer = setInterval(async () => {
+              try {
+                if (this.sock && this.connectionState === 'open') {
+                  await this.sock.uploadPreKeysToServerIfRequired();
+                }
+                if (this.authDir) {
+                  const cleaned = cleanStaleSessions(this.authDir);
+                  if (cleaned > 0) {
+                    console.error(`[Engine Socket] Self-healed ${cleaned} stale session files for ${this.sessionId}`);
+                  }
+                }
+              } catch (e: any) {
+                console.error(`[Engine Socket] Periodic maintenance warning: ${e?.message}`);
+              }
+            }, 10 * 60 * 1000);
+          }
+
           const user = this.sock?.user;
           const phoneNumber = user?.id ? user.id.split(':')[0].split('@')[0] : undefined;
           const displayName = user?.name || undefined;
@@ -335,6 +527,25 @@ export class EngineSocket {
             phoneNumber,
             displayName,
           });
+
+          // Proactive app state resync and initial contacts/chats emission
+          try {
+            if (typeof (this.sock as any)?.resyncAppState === 'function') {
+              console.error(`[Engine Socket] Requesting app state resync for ${this.sessionId}...`);
+              (this.sock as any).resyncAppState(
+                ['critical_block', 'critical_unblock_low', 'regular_high', 'regular_low', 'regular'],
+                false
+              ).catch((e: any) => console.error(`[Engine Socket] resyncAppState warning: ${e?.message}`));
+            }
+          } catch (e: any) {
+            console.error(`[Engine Socket] resyncAppState setup warning: ${e?.message}`);
+          }
+
+          // Emit contacts and chats 2 seconds after connect so UI is immediately refreshed
+          setTimeout(() => {
+            this.getContacts().catch((err) => console.error('[Engine Socket] Initial contacts sync error:', err));
+            this.getChats().catch((err) => console.error('[Engine Socket] Initial chats sync error:', err));
+          }, 2000);
         }
 
         if (connection === 'close') {
@@ -371,7 +582,7 @@ export class EngineSocket {
           ) {
             console.error(`[Engine Socket] Code ${statusCode} / network drop received for ${this.sessionId} (${errorMsg}). Reconnecting session...`);
             emitEvent('session.reconnecting', this.sessionId);
-            setTimeout(() => this.start(), 2000);
+            this.scheduleReconnect(2000);
             return;
           }
 
@@ -390,7 +601,7 @@ export class EngineSocket {
             const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 20000);
             console.error(`[Engine Socket] Reconnecting transient disconnect for ${this.sessionId} in ${delay}ms (Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
             emitEvent('session.reconnecting', this.sessionId);
-            setTimeout(() => this.start(), delay);
+            this.scheduleReconnect(delay);
           } else {
             console.error(`[Engine Socket] Max reconnect attempts reached for ${this.sessionId}`);
             emitEvent('session.disconnected', this.sessionId, {
@@ -408,17 +619,33 @@ export class EngineSocket {
     }
   }
 
+  private scheduleReconnect(delay: number = 2000): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.start().catch((err) => console.error(`[Engine Socket] Reconnect start error:`, err));
+    }, delay);
+  }
+
   /** Store a LID↔PN mapping in both directions */
   private addLidMapping(lid: string, pn: string): void {
-    this.lidToPn.set(lid, pn);
-    this.pnToLid.set(pn, lid);
-    const pnBare = pn.replace(/@.*$/, '');
-    const pnJid = `${pnBare}@s.whatsapp.net`;
-    this.pnToLid.set(pnJid, lid);
-    this.pnToLid.set(pnBare, lid);
-    const lidBare = lid.replace(/@.*$/, '');
-    this.lidToPn.set(`${lidBare}@lid`, pnJid);
-    this.lidToPn.set(lidBare, pnJid);
+    if (!lid || !pn) return;
+    const pnClean = pn.replace(/@.*$/, '').replace(/:.*$/, '');
+    if (!pnClean) return;
+    const pnJid = `${pnClean}@s.whatsapp.net`;
+    const lidClean = lid.replace(/@.*$/, '').replace(/:.*$/, '');
+    const lidJid = `${lidClean}@lid`;
+
+    this.lidToPn.set(lid, pnJid);
+    this.lidToPn.set(lidJid, pnJid);
+    this.lidToPn.set(lidClean, pnJid);
+
+    this.pnToLid.set(pn, lidJid);
+    this.pnToLid.set(pnJid, lidJid);
+    this.pnToLid.set(pnClean, lidJid);
   }
 
   /** Resolve any JID (LID or phone) to a deliverable @s.whatsapp.net JID */
@@ -427,15 +654,53 @@ export class EngineSocket {
     let target = rawJid.trim();
 
     if (target.endsWith('@lid')) {
-      let mapped = this.lidToPn.get(target);
+      const bareLid = target.replace(/@.*$/, '').replace(/:.*$/, '');
+      let mapped = this.lidToPn.get(target) || this.lidToPn.get(bareLid);
+
+      // Check reverse mapping files on disk
+      if (!mapped && this.authDir) {
+        try {
+          const rf = path.join(this.authDir, `lid-mapping-${bareLid}_reverse.json`);
+          if (fs.existsSync(rf)) {
+            const raw = JSON.parse(fs.readFileSync(rf, 'utf8'));
+            if (raw && typeof raw === 'string') {
+              const cleanPn = raw.replace(/@.*$/, '').replace(/:.*$/, '');
+              if (cleanPn) {
+                mapped = `${cleanPn}@s.whatsapp.net`;
+                this.addLidMapping(target, mapped);
+              }
+            }
+          }
+        } catch {}
+      }
+
+      // Check Baileys Signal lidMapping
+      if (!mapped && (this.sock as any)?.signalRepository?.lidMapping) {
+        try {
+          const pn = await (this.sock as any).signalRepository.lidMapping.getPNForLID(target);
+          if (pn) {
+            const cleanPn = pn.replace(/@.*$/, '').replace(/:.*$/, '');
+            const mappedPn: string = `${cleanPn}@s.whatsapp.net`;
+            mapped = mappedPn;
+            this.addLidMapping(target, mappedPn);
+          }
+        } catch {}
+      }
+
+      // Check contact store
       if (!mapped) {
         for (const c of this.contactStore.values()) {
-          if (c.lid === target && (c.id || (c as any).phoneNumber)) {
-            mapped = (c as any).phoneNumber || c.id;
+          const cLidBare = c.lid ? c.lid.replace(/@.*$/, '').replace(/:.*$/, '') : '';
+          if (cLidBare === bareLid && (c.id || (c as any).phoneNumber)) {
+            const phone = (c as any).phoneNumber || c.id;
+            const cleanPn = phone.replace(/@.*$/, '').replace(/:.*$/, '');
+            mapped = `${cleanPn}@s.whatsapp.net`;
+            this.addLidMapping(target, mapped);
             break;
           }
         }
       }
+
       if (mapped) {
         return mapped.endsWith('@s.whatsapp.net') ? mapped : `${mapped}@s.whatsapp.net`;
       }
@@ -449,6 +714,21 @@ export class EngineSocket {
       target = `${cleaned}@s.whatsapp.net`;
     }
 
+    // Strip any device suffix e.g. 919477762699:0@s.whatsapp.net -> 919477762699@s.whatsapp.net
+    if (target.includes(':') && target.endsWith('@s.whatsapp.net')) {
+      target = `${target.replace(/:.*@/, '@')}`;
+    }
+
+    if ((this.sock as any)?.signalRepository?.lidMapping && target.endsWith('@s.whatsapp.net')) {
+      try {
+        const barePn = target.replace(/@.*$/, '');
+        const lid = await (this.sock as any).signalRepository.lidMapping.getLIDForPN(barePn);
+        if (lid) {
+          this.addLidMapping(lid, target);
+        }
+      } catch {}
+    }
+
     return target;
   }
 
@@ -459,24 +739,38 @@ export class EngineSocket {
   private async toDeliverableJid(jid: string): Promise<string> {
     const resolved = await this.resolveJid(jid);
 
-    if (resolved.endsWith('@s.whatsapp.net') && this.sock) {
+    // If already a valid deliverable WhatsApp JID, return immediately without network overhead
+    if (
+      resolved.endsWith('@s.whatsapp.net') ||
+      resolved.endsWith('@g.us') ||
+      resolved.endsWith('@broadcast') ||
+      resolved.endsWith('@lid')
+    ) {
+      return resolved;
+    }
+
+    if (this.sock) {
       try {
-        const onWhatsAppPromise = this.sock.onWhatsApp(resolved);
+        const cleaned = resolved.replace(/\D/g, '');
+        const queryJid = `${cleaned}@s.whatsapp.net`;
+        const onWhatsAppPromise = this.sock.onWhatsApp(queryJid);
         const timeoutPromise = new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 3000));
         const results = (await Promise.race([onWhatsAppPromise, timeoutPromise])) as any;
         const hit = results?.[0];
         if (hit && hit.exists) {
-          console.error(`[Engine Socket] onWhatsApp verified recipient: ${resolved} -> ${hit.jid}`);
+          console.error(`[Engine Socket] onWhatsApp verified recipient: ${queryJid} -> ${hit.jid}`);
           return hit.jid;
         } else if (results !== undefined && (!hit || !hit.exists)) {
-          throw new Error(`Phone number ${resolved.replace('@s.whatsapp.net', '')} is not registered on WhatsApp`);
+          throw new Error(`Phone number ${cleaned} is not registered on WhatsApp`);
         }
+        return queryJid;
       } catch (e: any) {
         if (e.message?.includes('not registered')) {
           throw e;
         }
         console.error(`[Engine Socket] onWhatsApp check warning: ${e?.message}, sending directly to ${resolved}`);
-        return resolved;
+        const cleaned = resolved.replace(/\D/g, '');
+        return `${cleaned}@s.whatsapp.net`;
       }
     }
 
@@ -484,14 +778,18 @@ export class EngineSocket {
   }
 
   private cacheMessage(id: string, msg: WAMessage): void {
+    if (!id || !msg) return;
     this.messageStore.set(id, msg);
-    if (this.messageStore.size > 2000) {
+    if (msg.key?.id && msg.key.id !== id) {
+      this.messageStore.set(msg.key.id, msg);
+    }
+    if (this.messageStore.size > 3000) {
       const firstKey = this.messageStore.keys().next().value;
       if (firstKey) {
         this.messageStore.delete(firstKey);
       }
     }
-    this.saveMessageStore();
+    this.scheduleSaveMessageStore();
   }
 
   async requestPairingCode(phoneNumber: string): Promise<string> {
@@ -528,11 +826,12 @@ export class EngineSocket {
       return;
     }
 
+    let targetJid: string | null = null;
     try {
       let jid = chatId.trim();
 
       // Resolve to the correct deliverable JID (handles LID migration & onWhatsApp lookup)
-      let targetJid = await this.toDeliverableJid(jid);
+      targetJid = await this.toDeliverableJid(jid);
 
       // Detect self-messaging (sending message to session's own phone number)
       const selfUser = this.sock.user;
@@ -543,6 +842,39 @@ export class EngineSocket {
           targetJid = jidNormalizedUser(selfUser.id);
           console.error(`[Engine Socket] Self-messaging detected on session ${this.sessionId}. Target JID normalized to ${targetJid}`);
         }
+      }
+
+      // Automatic Session Self-Healing:
+      // Verify if recipient has a closed/broken Signal session in the auth directory.
+      // If closed, purge the stale session file and force a fresh pre-key fetch.
+      if (this.authDir) {
+        const recipientUser = targetJid.split('@')[0];
+        const isClosed = this.checkIfSessionClosed(recipientUser);
+        if (isClosed) {
+          console.error(`[Engine Socket] Stale/closed session detected for ${recipientUser}. Purging and fetching fresh pre-keys...`);
+          purgeSessionForJid(this.authDir, recipientUser);
+          try {
+            if ((this.sock as any)?.assertSessions) {
+              await (this.sock as any).assertSessions([targetJid], true);
+            }
+          } catch (e: any) {
+            console.error(`[Engine Socket] assertSessions warning during self-heal: ${e?.message}`);
+          }
+        }
+      }
+
+      // Pre-warm the session ratchet with WhatsApp servers for this recipient
+      try {
+        if (this.sock) {
+          if ((this.sock as any)?.assertSessions) {
+            await (this.sock as any).assertSessions([targetJid]);
+          }
+          await this.sock.presenceSubscribe(targetJid);
+          await this.sock.sendPresenceUpdate('composing', targetJid);
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
+      } catch (e: any) {
+        console.error(`[Engine Socket] Presence/session pre-warm warning for ${targetJid}: ${e?.message}`);
       }
 
       let result: WAMessage | null = null;
@@ -568,8 +900,14 @@ export class EngineSocket {
           if (result) break;
         } catch (err: any) {
           lastErr = err;
-          const isConnClosed = err?.message?.includes('Connection Closed') || err?.output?.statusCode === 428 || err?.message?.includes('conflict');
-          if (isConnClosed && attempt < 3) {
+          const isRetryable =
+            err?.message?.includes('Connection Closed') ||
+            err?.output?.statusCode === 428 ||
+            err?.message?.includes('conflict') ||
+            err?.message?.includes('timed out') ||
+            err?.message?.includes('Connection Lost') ||
+            err?.message?.includes('408');
+          if (isRetryable && attempt < 3) {
             console.error(`[Engine Socket] Send text attempt ${attempt} hit '${err.message}'. Waiting 2.5s for reconnect before retry...`);
             await new Promise((resolve) => setTimeout(resolve, 2500));
             continue;
@@ -584,8 +922,17 @@ export class EngineSocket {
 
       const externalId = result?.key?.id || undefined;
 
-      if (result && result.key?.id) {
-        this.cacheMessage(result.key.id, result);
+      if (result) {
+        if (!result.message) {
+          result.message = { conversation: text };
+        }
+        (result as any).body = text;
+        if (result.key?.id) {
+          this.cacheMessage(result.key.id, result);
+        }
+        if (messageId) {
+          this.cacheMessage(messageId, result);
+        }
       }
 
       console.error(`[Engine Socket] Message ${messageId} sent successfully to ${targetJid}, externalId: ${externalId}`);
@@ -600,6 +947,13 @@ export class EngineSocket {
         messageId,
         error: errorMsg,
       });
+    } finally {
+      try {
+        if (this.sock && targetJid) {
+          await this.sock.sendPresenceUpdate('paused', targetJid);
+        }
+      } catch (_) {}
+      this.resetIdlePresence();
     }
   }
 
@@ -611,15 +965,7 @@ export class EngineSocket {
 
         const rawNumber = jid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '');
         const name = c.name || c.notify || c.verifiedName || undefined;
-
-        let avatarUrl: string | undefined = (c as any).imgUrl || undefined;
-        if (!avatarUrl && this.sock && jid && jid.endsWith('@s.whatsapp.net')) {
-          try {
-            avatarUrl = await this.sock.profilePictureUrl(jid, 'image');
-          } catch (e) {
-            // Profile picture may be restricted or unavailable
-          }
-        }
+        const avatarUrl: string | undefined = (c as any).imgUrl || undefined;
 
         return {
           jid,
@@ -630,7 +976,25 @@ export class EngineSocket {
         };
       });
 
-    const contacts = await Promise.all(contactsPromises);
+    const rawContacts = await Promise.all(contactsPromises);
+    const contactsMap = new Map<string, any>();
+    for (const c of rawContacts) {
+      if (!c.jid) continue;
+      const existing = contactsMap.get(c.jid);
+      if (!existing) {
+        contactsMap.set(c.jid, c);
+      } else {
+        const hasBetterName = c.name && c.name !== c.phoneNumber && (!existing.name || existing.name === existing.phoneNumber);
+        contactsMap.set(c.jid, {
+          ...existing,
+          ...c,
+          name: hasBetterName ? c.name : existing.name,
+          phoneNumber: c.phoneNumber || existing.phoneNumber,
+          avatarUrl: c.avatarUrl || existing.avatarUrl,
+        });
+      }
+    }
+    const contacts = Array.from(contactsMap.values());
     emitEvent('contacts.synced', this.sessionId, { contacts });
   }
 
@@ -646,14 +1010,27 @@ export class EngineSocket {
     }
 
     const allJids = Array.from(
-      new Set<string>([...this.chatStore.keys(), ...jidToMessages.keys()])
+      new Set<string>([...this.chatStore.keys(), ...jidToMessages.keys()].map((j) => jidNormalizedUser(j)))
     ).filter((jid: string) => jid && jid !== '0' && jid !== '0@s.whatsapp.net' && jid !== 'status@broadcast');
 
     const chatsPromises = allJids.map(async (rawJid: string) => {
-      let jid: string = await this.resolveJid(rawJid);
+      let jid: string = jidNormalizedUser(await this.resolveJid(rawJid));
 
       const chatObj = this.chatStore.get(rawJid) || this.chatStore.get(jid);
-      const contactObj = this.contactStore.get(rawJid) || this.contactStore.get(jid);
+      let contactObj = this.contactStore.get(rawJid) || this.contactStore.get(jid);
+      if (!contactObj) {
+        for (const c of this.contactStore.values()) {
+          if (
+            (c.lid && (c.lid === rawJid || c.lid === jid)) ||
+            (c.id && (c.id === rawJid || c.id === jid)) ||
+            ((c as any).phoneNumber && (jid.includes((c as any).phoneNumber) || rawJid.includes((c as any).phoneNumber)))
+          ) {
+            contactObj = c;
+            break;
+          }
+        }
+      }
+
       const msgs = jidToMessages.get(rawJid) || jidToMessages.get(jid) || [];
       msgs.sort((a, b) => Number(a.messageTimestamp || 0) - Number(b.messageTimestamp || 0));
       const lastMsg = msgs[msgs.length - 1];
@@ -670,24 +1047,21 @@ export class EngineSocket {
 
       const isGroup = jid.endsWith('@g.us');
       const rawNumber = jid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '');
-      const name = (chatObj as any)?.name || contactObj?.name || contactObj?.notify || contactObj?.verifiedName || (rawNumber !== '0' ? rawNumber : undefined);
-
-      let avatarUrl: string | undefined = (contactObj as any)?.imgUrl || undefined;
-      if (!avatarUrl && this.sock && jid) {
-        try {
-          avatarUrl = await this.sock.profilePictureUrl(jid, 'image');
-        } catch (e) {
-          try {
-            avatarUrl = await this.sock.profilePictureUrl(jid, 'preview');
-          } catch (e2) {
-            // Unavailable or restricted privacy
+      let name = (chatObj as any)?.name || contactObj?.name || contactObj?.notify || contactObj?.verifiedName;
+      if (!name || name === rawNumber || name.includes('@')) {
+        for (const c of this.contactStore.values()) {
+          const cName = c.name || c.notify || c.verifiedName;
+          if (cName && (c.id === jid || c.lid === jid || ((c as any).phoneNumber && rawNumber.includes((c as any).phoneNumber)))) {
+            name = cName;
+            break;
           }
         }
       }
+      const avatarUrl: string | undefined = (contactObj as any)?.imgUrl || undefined;
 
       return {
         jid,
-        name: name || rawNumber,
+        name: name || (rawNumber !== '0' ? rawNumber : undefined),
         isGroup,
         lastMessageBody,
         lastMessageAt,
@@ -707,6 +1081,7 @@ export class EngineSocket {
         chatsMap.set(c.jid, {
           ...existing,
           ...c,
+          name: (c.name && !c.name.includes('@')) ? c.name : existing.name,
           lastMessageBody: c.lastMessageBody || existing.lastMessageBody,
           lastMessageAt: c.lastMessageAt || existing.lastMessageAt,
           unreadCount: Math.max(existing.unreadCount || 0, c.unreadCount || 0),
@@ -719,11 +1094,12 @@ export class EngineSocket {
   }
 
   async getChatMessages(targetJid: string, limit: number = 50): Promise<void> {
-    const resolvedTargetJid = await this.resolveJid(targetJid);
+    const normalizedTarget = jidNormalizedUser(targetJid);
+    const resolvedTargetJid = jidNormalizedUser(await this.resolveJid(normalizedTarget));
     const filtered = Array.from(this.messageStore.values())
       .filter((m) => {
-        const rJid = m.key?.remoteJid;
-        return rJid === targetJid || rJid === resolvedTargetJid || (rJid && this.lidToPn.get(rJid) === resolvedTargetJid);
+        const rJid = jidNormalizedUser(m.key?.remoteJid || '');
+        return rJid === normalizedTarget || rJid === resolvedTargetJid || (rJid && this.lidToPn.get(rJid) === resolvedTargetJid);
       })
       .sort((a, b) => Number(a.messageTimestamp || 0) - Number(b.messageTimestamp || 0));
 
@@ -787,8 +1163,26 @@ export class EngineSocket {
       return;
     }
 
+    let targetJid: string | null = null;
     try {
-      let targetJid = await this.toDeliverableJid(chatId);
+      targetJid = await this.toDeliverableJid(chatId);
+
+      // Automatic Session Self-Healing:
+      if (this.authDir) {
+        const recipientUser = targetJid.split('@')[0];
+        const isClosed = this.checkIfSessionClosed(recipientUser);
+        if (isClosed) {
+          console.error(`[Engine Socket] Stale/closed session detected for ${recipientUser}. Purging and fetching fresh pre-keys...`);
+          purgeSessionForJid(this.authDir, recipientUser);
+          try {
+            if ((this.sock as any)?.assertSessions) {
+              await (this.sock as any).assertSessions([targetJid], true);
+            }
+          } catch (e: any) {
+            console.error(`[Engine Socket] assertSessions warning during self-heal: ${e?.message}`);
+          }
+        }
+      }
 
       let buffer: Buffer;
       if (mediaBufferOrUrl.startsWith('data:')) {
@@ -813,7 +1207,33 @@ export class EngineSocket {
         messageContent = { sticker: buffer };
       }
 
+      // Pre-warm the session ratchet with WhatsApp servers for this recipient
+      try {
+        if (this.sock) {
+          if ((this.sock as any)?.assertSessions) {
+            await (this.sock as any).assertSessions([targetJid]);
+          }
+          await this.sock.presenceSubscribe(targetJid);
+          await this.sock.sendPresenceUpdate('composing', targetJid);
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
+      } catch (e: any) {
+        console.error(`[Engine Socket] Presence/session pre-warm warning for ${targetJid}: ${e?.message}`);
+      }
+
       const sentMsg = await this.sock.sendMessage(targetJid, messageContent);
+      if (sentMsg) {
+        if (!sentMsg.message) {
+          sentMsg.message = messageContent;
+        }
+        (sentMsg as any).body = caption || fileName || '';
+        if (sentMsg.key?.id) {
+          this.cacheMessage(sentMsg.key.id, sentMsg);
+        }
+        if (messageId) {
+          this.cacheMessage(messageId, sentMsg);
+        }
+      }
       if (messageId && sentMsg?.key?.id) {
         emitEvent('message.sent', this.sessionId, {
           messageId,
@@ -828,6 +1248,13 @@ export class EngineSocket {
           error: err?.message || 'Send media failed',
         });
       }
+    } finally {
+      try {
+        if (this.sock && targetJid) {
+          await this.sock.sendPresenceUpdate('paused', targetJid);
+        }
+      } catch (_) {}
+      this.resetIdlePresence();
     }
   }
 
@@ -933,6 +1360,8 @@ export class EngineSocket {
         await this.sock.sendPresenceUpdate('paused', targetJid);
       }
 
+      this.resetIdlePresence();
+
       emitEvent('presence.simulated', this.sessionId, {
         jid: targetJid,
         state,
@@ -950,10 +1379,39 @@ export class EngineSocket {
 
   async stop(): Promise<void> {
     this.isExplicitStop = true;
-    if (this.sock) {
-      this.sock.end(undefined);
-    } else {
-      emitEvent('session.stopped', this.sessionId);
+    if (this.idlePresenceTimer) {
+      clearTimeout(this.idlePresenceTimer);
+      this.idlePresenceTimer = null;
     }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.preKeyTimer) {
+      clearInterval(this.preKeyTimer);
+      this.preKeyTimer = null;
+    }
+    if (this.saveStoreTimer) {
+      clearTimeout(this.saveStoreTimer);
+      this.saveStoreTimer = null;
+    }
+    this.saveMessageStore();
+    if (this.sock) {
+      try {
+        this.sock.ev.removeAllListeners('connection.update');
+        this.sock.ev.removeAllListeners('creds.update');
+        this.sock.ev.removeAllListeners('messages.upsert');
+        this.sock.ev.removeAllListeners('messages.update');
+        this.sock.ev.removeAllListeners('contacts.upsert');
+        this.sock.ev.removeAllListeners('chats.upsert');
+        this.sock.ev.removeAllListeners('messaging-history.set');
+        this.sock.end(undefined);
+        this.sock.ws?.close();
+      } catch (e: any) {
+        console.error(`[Engine Socket] Error ending socket: ${e?.message}`);
+      }
+      this.sock = null;
+    }
+    emitEvent('session.stopped', this.sessionId);
   }
 }

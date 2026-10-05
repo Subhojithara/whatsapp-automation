@@ -31,6 +31,7 @@ pub fn init_routes() -> Scope {
         .route("/{id}/stop", web::post().to(stop_session))
         .route("/{id}/restart", web::post().to(restart_session))
         .route("/{id}/qr", web::get().to(get_qr))
+        .route("/{id}/health", web::get().to(get_session_health))
         .route("/{id}/pairing-code", web::post().to(request_pairing_code))
         .route("/{id}/messages/send-text", web::post().to(crate::routes::messages::send_text_message))
         .service(crate::routes::contacts::init_routes())
@@ -110,7 +111,7 @@ async fn start_session(
     let auth_dir = format!("{}/{}/auth", config.engine_data_dir, session_id);
     let updated = SessionService::update_status(&pool, &session_id, SessionStatus::Starting, None).await?;
 
-    engine_manager.start_session(session_id.clone(), auth_dir).await?;
+    engine_manager.start_session(session_id.clone(), auth_dir, Some(session.engine.clone())).await?;
     let response_data: SessionResponse = updated.into();
 
     Ok(HttpResponse::Ok().json(ApiSuccessEnvelope {
@@ -155,9 +156,10 @@ async fn restart_session(
     let _ = engine_manager.stop_session(&session_id).await;
 
     let auth_dir = format!("{}/{}/auth", config.engine_data_dir, session_id);
+    let session = SessionService::get_session(&pool, &session_id).await?;
     let updated = SessionService::update_status(&pool, &session_id, SessionStatus::Starting, None).await?;
 
-    engine_manager.start_session(session_id.clone(), auth_dir).await?;
+    engine_manager.start_session(session_id.clone(), auth_dir, Some(session.engine.clone())).await?;
     let response_data: SessionResponse = updated.into();
 
     Ok(HttpResponse::Ok().json(ApiSuccessEnvelope {
@@ -202,3 +204,18 @@ async fn request_pairing_code(
         data: serde_json::json!({ "sessionId": session_id, "phoneNumber": phone_number, "code": code }),
     }))
 }
+
+async fn get_session_health(
+    pool: web::Data<SqlitePool>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
+    let session_id = path.into_inner();
+    let _ = SessionService::get_session(&pool, &session_id).await?;
+    let health = crate::services::account_health_service::AccountHealthService::get_session_health(&pool, &session_id).await?;
+
+    Ok(HttpResponse::Ok().json(ApiSuccessEnvelope {
+        success: true,
+        data: health,
+    }))
+}
+

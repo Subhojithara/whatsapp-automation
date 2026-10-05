@@ -2,6 +2,7 @@
 mod tests {
     use crate::engine::protocol::IncomingMessage;
     use crate::models::campaign::*;
+    use crate::services::account_health_service::{AccountHealthService, SafetyCheckResult};
     use crate::services::blacklist_service::BlacklistService;
     use crate::services::campaign_service::CampaignService;
     use crate::services::campaign_worker::CampaignWorker;
@@ -165,13 +166,13 @@ mod tests {
                 }),
                 steps: Some(vec![
                     CreateStepDto {
-                        step_number: 1,
+                        step_number: Some(1),
                         delay_after_previous_sec: Some(0),
                         template_text: "Hello {{name}}!".to_string(),
                         media_url: None,
                     },
                     CreateStepDto {
-                        step_number: 2,
+                        step_number: Some(2),
                         delay_after_previous_sec: Some(10),
                         template_text: "Follow up message for {{name}}.".to_string(),
                         media_url: None,
@@ -262,7 +263,7 @@ mod tests {
                 recipients: None,
                 anti_ban_config: None,
                 steps: Some(vec![CreateStepDto {
-                    step_number: 1,
+                    step_number: Some(1),
                     delay_after_previous_sec: Some(0),
                     template_text: "Hi!".to_string(),
                     media_url: None,
@@ -304,5 +305,64 @@ mod tests {
 
         let cmp = CampaignService::get_campaign(&pool, &campaign.id).await.unwrap();
         assert_eq!(cmp.replied_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_account_health_service_safe_and_critical() {
+        let pool = setup_test_db().await;
+
+        sqlx::query("INSERT INTO sessions (id, name, status) VALUES ('sess_health_test', 'Health Test', 'READY')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Initially no messages -> should be SAFE
+        let health = AccountHealthService::get_session_health(&pool, "sess_health_test")
+            .await
+            .unwrap();
+        assert_eq!(health.health_score, 100);
+        assert_eq!(health.risk_level, "SAFE");
+
+        // Insert 10 outgoing messages
+        let now_str = chrono::Utc::now().to_rfc3339();
+        for i in 0..10 {
+            sqlx::query("INSERT INTO messages (id, session_id, chat_id, body, direction, status, created_at, updated_at) VALUES (?, 'sess_health_test', '123@s.whatsapp.net', 'hello', 'outgoing', 'SENT', ?, ?)")
+                .bind(format!("msg_health_{}", i))
+                .bind(&now_str)
+                .bind(&now_str)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+
+        let health_after_10 = AccountHealthService::get_session_health(&pool, "sess_health_test")
+            .await
+            .unwrap();
+        assert_eq!(health_after_10.unreplied_outbound_streak, 10);
+        assert_eq!(health_after_10.risk_level, "SAFE");
+
+        // Now insert 45 more outgoing messages to cross critical threshold (total 55 unreplied)
+        for i in 10..55 {
+            sqlx::query("INSERT INTO messages (id, session_id, chat_id, body, direction, status, created_at, updated_at) VALUES (?, 'sess_health_test', '123@s.whatsapp.net', 'spammy', 'outgoing', 'SENT', ?, ?)")
+                .bind(format!("msg_health_{}", i))
+                .bind(&now_str)
+                .bind(&now_str)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+
+        let safety_check = AccountHealthService::check_dispatch_safety(&pool, "sess_health_test")
+            .await
+            .unwrap();
+
+        match safety_check {
+            SafetyCheckResult::PauseForCooldown { unreplied_streak, .. } => {
+                assert_eq!(unreplied_streak, 55, "Should report 55 unreplied streak and pause");
+            }
+            SafetyCheckResult::Proceed { .. } => {
+                panic!("Should not proceed with 55 unreplied messages");
+            }
+        }
     }
 }

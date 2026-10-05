@@ -61,7 +61,7 @@ impl WarmupManager {
             r#"
             SELECT COUNT(*) FROM messages
             WHERE session_id = ?
-              AND direction = 'OUTGOING'
+              AND (direction = 'OUTGOING' OR direction = 'outgoing' OR from_me = 1)
               AND created_at >= ?
             "#,
         )
