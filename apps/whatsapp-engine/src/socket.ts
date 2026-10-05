@@ -384,6 +384,26 @@ export class EngineSocket {
               } else if (msgContent.stickerMessage) {
                 messageType = 'sticker';
                 body = '🏷️ Sticker';
+              } else if (msgContent.reactionMessage) {
+                const reactionEmoji = msgContent.reactionMessage.text || '';
+                const targetMsgId = msgContent.reactionMessage.key?.id;
+                console.error(`[Engine Socket] Reaction received in chat ${jid}: ${reactionEmoji} for ${targetMsgId}`);
+                continue;
+              } else if (msgContent.protocolMessage) {
+                if (msgContent.protocolMessage.type === 0) {
+                  const targetMsgId = msgContent.protocolMessage.key?.id;
+                  console.error(`[Engine Socket] Message revoked (deleted) in chat ${jid}: ${targetMsgId}`);
+                  if (targetMsgId) {
+                    const existing = this.messageStore.get(targetMsgId);
+                    if (existing && existing.message) {
+                      (existing as any).body = '🚫 This message was deleted';
+                      if (existing.message.conversation) existing.message.conversation = '🚫 This message was deleted';
+                      if (existing.message.extendedTextMessage) existing.message.extendedTextMessage.text = '🚫 This message was deleted';
+                      this.scheduleSaveMessageStore();
+                    }
+                  }
+                }
+                continue;
               }
 
               if (messageType !== 'text' && this.sock) {
@@ -444,6 +464,14 @@ export class EngineSocket {
               status: statusStr,
               statusCode: update.status,
             });
+          }
+        }
+      });
+
+      this.sock.ev.on('messages.reaction', (reactions) => {
+        for (const { key, reaction } of reactions) {
+          if (reaction?.key?.id) {
+            console.error(`[Engine Socket] Message reaction: '${reaction.text || 'removed'}' for ${reaction.key.id} in ${key.remoteJid}`);
           }
         }
       });
