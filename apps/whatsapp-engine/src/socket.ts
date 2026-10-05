@@ -188,7 +188,7 @@ export class EngineSocket {
         auth: state,
         printQRInTerminal: false,
         logger: logger as any,
-        browser: Browsers.ubuntu('Chrome'),
+        browser: Browsers.windows('Chrome'),
         keepAliveIntervalMs: 25000,
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
@@ -863,7 +863,7 @@ export class EngineSocket {
         }
       }
 
-      // Pre-warm the session ratchet with WhatsApp servers for this recipient
+      // Pre-warm the session ratchet with WhatsApp servers & simulate natural human typing
       try {
         if (this.sock) {
           if ((this.sock as any)?.assertSessions) {
@@ -871,7 +871,9 @@ export class EngineSocket {
           }
           await this.sock.presenceSubscribe(targetJid);
           await this.sock.sendPresenceUpdate('composing', targetJid);
-          await new Promise((resolve) => setTimeout(resolve, 400));
+          const charSpeed = Math.floor(Math.random() * 15) + 20; // 20-35ms per character
+          const typingMs = Math.min(Math.max((text?.length || 10) * charSpeed, 800), 3500);
+          await new Promise((resolve) => setTimeout(resolve, typingMs));
         }
       } catch (e: any) {
         console.error(`[Engine Socket] Presence/session pre-warm warning for ${targetJid}: ${e?.message}`);
@@ -1207,15 +1209,17 @@ export class EngineSocket {
         messageContent = { sticker: buffer };
       }
 
-      // Pre-warm the session ratchet with WhatsApp servers for this recipient
+      // Pre-warm the session ratchet & simulate human media preparation (recording for audio, composing for files)
       try {
         if (this.sock) {
           if ((this.sock as any)?.assertSessions) {
             await (this.sock as any).assertSessions([targetJid]);
           }
           await this.sock.presenceSubscribe(targetJid);
-          await this.sock.sendPresenceUpdate('composing', targetJid);
-          await new Promise((resolve) => setTimeout(resolve, 400));
+          const presenceState = mediaType === 'audio' ? 'recording' : 'composing';
+          await this.sock.sendPresenceUpdate(presenceState, targetJid);
+          const mediaWaitMs = Math.floor(Math.random() * 1000) + 1200; // 1.2s - 2.2s natural preparation
+          await new Promise((resolve) => setTimeout(resolve, mediaWaitMs));
         }
       } catch (e: any) {
         console.error(`[Engine Socket] Presence/session pre-warm warning for ${targetJid}: ${e?.message}`);
@@ -1234,6 +1238,12 @@ export class EngineSocket {
           this.cacheMessage(messageId, sentMsg);
         }
       }
+
+      try {
+        if (this.sock && targetJid) {
+          await this.sock.sendPresenceUpdate('paused', targetJid);
+        }
+      } catch (_) {}
       if (messageId && sentMsg?.key?.id) {
         emitEvent('message.sent', this.sessionId, {
           messageId,
