@@ -19,13 +19,22 @@ import {
   MessageSquare,
   Search,
   ExternalLink,
+  Layers,
 } from "lucide-react";
+import { LiquidToggle } from "@/components/ui/LiquidToggle";
+import { MagnifyingGlass } from "@/components/ui/MagnifyingGlass";
+import { ShimmerButton } from "@/components/ui/ShimmerButton";
 
 export default function McpDocsPage() {
   const [activeTab, setActiveTab] = useState<"config" | "tools" | "qr" | "skill" | "docker">("config");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Agent capability controls
+  const [antiBanThrottling, setAntiBanThrottling] = useState(true);
+  const [autoSessionRouting, setAutoSessionRouting] = useState(true);
+  const [stdioBridgeSandbox, setStdioBridgeSandbox] = useState(true);
 
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -40,7 +49,7 @@ export default function McpDocsPage() {
           command: "node",
           args: ["c:/client/reachout-automation2.0/apps/mcp-server/dist/index.js"],
           env: {
-            VELURIX_API_URL: "http://172.21.92.41:8080/api/v1",
+            VELURIX_API_URL: "https://213-136-76-153.sslip.io/api/v1",
             VELURIX_API_KEY: "xCdANIh_JYwEwczVoPOfp1SdV0YTvhBkNqWPsjkfhVBiazJm6cCyJraMVEo9jxvp",
           },
         },
@@ -57,7 +66,7 @@ export default function McpDocsPage() {
           command: "node",
           args: ["c:/client/reachout-automation2.0/apps/mcp-server/dist/index.js"],
           env: {
-            VELURIX_API_URL: "http://localhost:8080/api/v1",
+            VELURIX_API_URL: "https://213-136-76-153.sslip.io/api/v1",
             VELURIX_API_KEY: "xCdANIh_JYwEwczVoPOfp1SdV0YTvhBkNqWPsjkfhVBiazJm6cCyJraMVEo9jxvp",
           },
         },
@@ -76,7 +85,7 @@ export default function McpDocsPage() {
           command: "node",
           args: ["c:/client/reachout-automation2.0/apps/mcp-server/dist/index.js"],
           env: {
-            VELURIX_API_URL: "http://172.21.92.41:8080/api/v1",
+            VELURIX_API_URL: "https://213-136-76-153.sslip.io/api/v1",
             VELURIX_API_KEY: "xCdANIh_JYwEwczVoPOfp1SdV0YTvhBkNqWPsjkfhVBiazJm6cCyJraMVEo9jxvp",
           },
         },
@@ -98,247 +107,224 @@ export default function McpDocsPage() {
 
     // Login & QR
     { name: "login_whatsapp", category: "Login & QR", desc: "Start login flow, retrieve QR code string, and return base64 PNG data URI for AI display." },
-    { name: "check_login_status", category: "Login & QR", desc: "Poll session login state after QR scan (returns CONNECTED, WAITING, or FAILED)." },
-    { name: "request_pairing_code", category: "Login & QR", desc: "Request an 8-character phone pairing code as an alternative to QR scanning." },
+    { name: "check_login_status", category: "Login & QR", desc: "Check current authentication status of a session during QR pairing." },
+    { name: "get_qr_code", category: "Login & QR", desc: "Retrieve latest QR code image or raw string for an ongoing pairing session." },
 
-    // Messages
-    { name: "send_whatsapp_text", category: "Messages", desc: "Send a text message from a specific session to a WhatsApp number/JID." },
-    { name: "send_whatsapp_media", category: "Messages", desc: "Send image, video, document, or audio media from a session." },
-    { name: "validate_phone_numbers", category: "Messages", desc: "Batch validate whether phone numbers are registered WhatsApp accounts." },
+    // Chats & Messaging
+    { name: "list_chats", category: "Messaging", desc: "List all conversation threads with unread counts and last message previews." },
+    { name: "get_chat_messages", category: "Messaging", desc: "Fetch message history for a specific conversation JID." },
+    { name: "send_message", category: "Messaging", desc: "Send an outgoing WhatsApp text message to a contact JID or phone number." },
+    { name: "send_media_message", category: "Messaging", desc: "Send image, video, audio voice notes, or documents with captions." },
+    { name: "mark_chat_read", category: "Messaging", desc: "Mark a conversation as read and clear unread badges on device." },
 
-    // Contacts & Chats
-    { name: "list_contacts", category: "Contacts", desc: "List synced contacts for a WhatsApp session." },
-    { name: "search_contacts", category: "Contacts", desc: "Search contacts by name or phone number." },
-    { name: "sync_contacts", category: "Contacts", desc: "Force trigger contact synchronization from WhatsApp." },
-    { name: "get_profile_picture", category: "Contacts", desc: "Fetch profile picture URL for a contact." },
-    { name: "list_chats", category: "Chats", desc: "List active WhatsApp chat conversations." },
-    { name: "get_chat_messages", category: "Chats", desc: "Retrieve message history for a specific chat." },
-    { name: "sync_chats", category: "Chats", desc: "Force sync chat conversations from WhatsApp." },
-    { name: "mark_chat_read", category: "Chats", desc: "Mark a chat conversation as read." },
+    // Campaigns & Anti-Ban
+    { name: "list_campaigns", category: "Campaigns", desc: "List all bulk messaging campaigns with delivered counts and reply rates." },
+    { name: "create_campaign", category: "Campaigns", desc: "Create an anti-ban bulk outreach campaign with Spintax and follow-up steps." },
+    { name: "start_campaign", category: "Campaigns", desc: "Start or resume execution of a bulk messaging campaign." },
+    { name: "pause_campaign", category: "Campaigns", desc: "Pause an active campaign immediately." },
+    { name: "stop_campaign", category: "Campaigns", desc: "Permanently stop campaign execution." },
+    { name: "clone_campaign", category: "Campaigns", desc: "Duplicate a campaign configuration including follow-up sequences." },
+    { name: "delete_campaign", category: "Campaigns", desc: "Delete a campaign and its associated recipients." },
 
-    // Campaigns
-    { name: "list_campaigns", category: "Campaigns", desc: "List all campaigns with progress metrics and status." },
-    { name: "get_campaign", category: "Campaigns", desc: "Get detailed campaign settings, steps, and anti-ban rules." },
-    { name: "create_campaign", category: "Campaigns", desc: "Create a multi-step campaign with anti-ban delay configuration." },
-    { name: "update_campaign", category: "Campaigns", desc: "Update existing campaign name, description, or configuration." },
-    { name: "delete_campaign", category: "Campaigns", desc: "Delete a campaign and its recipient queue." },
-    { name: "clone_campaign", category: "Campaigns", desc: "Clone an existing campaign with all steps and anti-ban settings." },
-    { name: "start_campaign", category: "Campaigns", desc: "Start executing a pending or paused campaign." },
-    { name: "pause_campaign", category: "Campaigns", desc: "Pause a running campaign execution." },
-    { name: "stop_campaign", category: "Campaigns", desc: "Stop a campaign completely." },
-    { name: "retry_failed_recipients", category: "Campaigns", desc: "Re-queue all failed recipients for execution retry." },
-    { name: "import_recipients", category: "Campaigns", desc: "Import recipient phone numbers and custom variables into a campaign." },
-    { name: "export_campaign_results", category: "Campaigns", desc: "Export campaign recipient delivery and reply audit trail as CSV." },
-
-    // Recipients & Logs
-    { name: "list_campaign_recipients", category: "Recipients & Logs", desc: "List all recipients in a campaign with delivery status." },
-    { name: "update_campaign_recipient", category: "Recipients & Logs", desc: "Update recipient custom variables or reschedule follow-up time." },
-    { name: "list_campaign_logs", category: "Recipients & Logs", desc: "List message delivery logs including resolved message text." },
-
-    // Blacklist & Templates
-    { name: "get_blacklist", category: "Blacklist & Templates", desc: "Get all global blacklisted phone numbers." },
-    { name: "add_to_blacklist", category: "Blacklist & Templates", desc: "Add number(s) to global anti-messaging blacklist." },
-    { name: "remove_from_blacklist", category: "Blacklist & Templates", desc: "Remove number from global blacklist." },
-    { name: "list_templates", category: "Blacklist & Templates", desc: "List reusable message templates." },
-    { name: "get_template", category: "Blacklist & Templates", desc: "Get message template details by ID." },
-    { name: "create_template", category: "Blacklist & Templates", desc: "Create a new message template." },
-    { name: "update_template", category: "Blacklist & Templates", desc: "Update an existing message template." },
-    { name: "delete_template", category: "Blacklist & Templates", desc: "Delete a message template." },
-
-    // Smart Composite
-    { name: "send_campaign_message", category: "Smart Composite", desc: "One-shot: validates number and sends text message in a single tool call." },
-    { name: "send_bulk_messages", category: "Smart Composite", desc: "Sends messages to multiple numbers with configurable jitter delay." },
-    { name: "create_and_start_campaign", category: "Smart Composite", desc: "All-in-one wizard: creates campaign + imports recipients + starts execution." },
-    { name: "get_campaign_dashboard", category: "Smart Composite", desc: "Aggregates sent/delivered/failed/replied stats and progress %." },
-    { name: "full_system_status", category: "Smart Composite", desc: "Complete system summary across sessions, active campaigns, and health." },
+    // Contacts & Blacklist
+    { name: "list_contacts", category: "Contacts", desc: "List all synced WhatsApp contacts with name and phone number." },
+    { name: "sync_contacts", category: "Contacts", desc: "Trigger phone address book synchronization from Baileys engine." },
+    { name: "get_blacklist", category: "Safety", desc: "Retrieve all phone numbers and domains on the global anti-outreach blacklist." },
+    { name: "add_to_blacklist", category: "Safety", desc: "Add a recipient phone number to the blacklist to prevent future messaging." },
+    { name: "remove_from_blacklist", category: "Safety", desc: "Remove a recipient phone number from the blacklist." },
   ];
 
-  const categories = ["All", "Sessions", "Login & QR", "Messages", "Contacts", "Chats", "Campaigns", "Recipients & Logs", "Blacklist & Templates", "Smart Composite"];
+  const categories = ["All", "Sessions", "Login & QR", "Messaging", "Campaigns", "Contacts", "Safety"];
 
   const filteredTools = toolsData.filter((t) => {
-    const matchesCat = selectedCategory === "All" || t.category === selectedCategory;
-    const matchesQuery = t.name.toLowerCase().includes(searchQuery.toLowerCase()) || t.desc.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCat && matchesQuery;
+    const matchCat = selectedCategory === "All" || t.category === selectedCategory;
+    const matchQuery =
+      searchQuery.trim() === "" ||
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.desc.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchCat && matchQuery;
   });
 
+  const tabItems: { id: "config" | "tools" | "qr" | "skill" | "docker"; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+    { id: "config", label: "Client Configs", icon: Code2 },
+    { id: "tools", label: `Tools Catalog (${toolsData.length})`, icon: Cpu },
+    { id: "qr", label: "Agent QR Protocol", icon: QrCode },
+    { id: "skill", label: "Antigravity Skill", icon: Bot },
+    { id: "docker", label: "Podman & Docker", icon: Server },
+  ];
+
   return (
-    <div className="max-w-6xl mx-auto space-y-8 py-4">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 via-zinc-900 to-emerald-950 p-6 md:p-8 text-white border border-emerald-500/20 shadow-xl">
-        <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-              <Bot className="w-3.5 h-3.5" /> Model Context Protocol (MCP) & AI Agent Skills
+    <div className="space-y-6 pb-20 max-w-7xl mx-auto">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+              <Shield className="w-4 h-4" />
             </div>
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-              AI Agent Control Interface
-            </h1>
-            <p className="text-zinc-400 text-xs md:text-sm max-w-2xl leading-relaxed">
-              Equip <span className="text-emerald-400 font-semibold">Hermes Agent</span>, <span className="text-emerald-400 font-semibold">Antigravity</span>, and <span className="text-emerald-400 font-semibold">Claude Desktop</span> with 49 production-ready tools, QR login image rendering, resources, and custom agent skills.
-            </p>
-          </div>
-          <div className="flex flex-row md:flex-col items-center md:items-end justify-between gap-3 shrink-0">
-            <div className="px-4 py-2 rounded-xl bg-zinc-800/80 border border-zinc-700/50 text-right backdrop-blur-sm">
-              <div className="text-xs text-zinc-400">Total Capabilities</div>
-              <div className="text-lg font-bold text-emerald-400">49 Tools • 3 Resources • 3 Prompts</div>
-            </div>
-            <div className="inline-flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Podman Container Ready
-            </div>
-          </div>
+            MCP Protocol & AI Agent Skills Studio
+          </h1>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+            Standardized Model Context Protocol interfaces for Google Antigravity, Claude Desktop & Hermes Agent
+          </p>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="mt-8 flex flex-wrap items-center gap-2 border-t border-zinc-800/80 pt-4">
-          <button
-            onClick={() => setActiveTab("config")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === "config"
-                ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
-                : "bg-zinc-800/60 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            }`}
-          >
-            <Code2 className="w-3.5 h-3.5" /> Client Configuration JSON
-          </button>
-          <button
-            onClick={() => setActiveTab("tools")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === "tools"
-                ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
-                : "bg-zinc-800/60 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            }`}
-          >
-            <Cpu className="w-3.5 h-3.5" /> Tools Dictionary ({toolsData.length})
-          </button>
-          <button
-            onClick={() => setActiveTab("qr")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === "qr"
-                ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
-                : "bg-zinc-800/60 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            }`}
-          >
-            <QrCode className="w-3.5 h-3.5" /> Hermes QR Login Flow
-          </button>
-          <button
-            onClick={() => setActiveTab("skill")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === "skill"
-                ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
-                : "bg-zinc-800/60 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            }`}
-          >
-            <Cpu className="w-3.5 h-3.5" /> Antigravity Agent Skill
-          </button>
-          <button
-            onClick={() => setActiveTab("docker")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === "docker"
-                ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
-                : "bg-zinc-800/60 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            }`}
-          >
-            <Server className="w-3.5 h-3.5" /> Podman / Docker Deployment
-          </button>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            49 Stdio Tools Live
+          </span>
         </div>
       </div>
 
-      {/* Tab Content 1: Configurations */}
+      {/* Safety Controls Card (rareui / liquid toggle inspired) */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#101115] border border-zinc-200/80 dark:border-white/[0.08] shadow-xs">
+        <div className="flex items-center gap-2 mb-3">
+          <Cpu className="w-4 h-4 text-emerald-500" />
+          <h3 className="font-bold text-xs text-zinc-900 dark:text-zinc-100">
+            Agent Execution & Safety Controls
+          </h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+          <LiquidToggle
+            checked={antiBanThrottling}
+            onChange={setAntiBanThrottling}
+            label="Anti-Bot Throttling"
+            description="Rate-limits agent tool calls to avoid high-frequency bot detection."
+          />
+          <LiquidToggle
+            checked={autoSessionRouting}
+            onChange={setAutoSessionRouting}
+            label="Auto Session Routing"
+            description="Automatically selects the healthiest READY session for outreach."
+          />
+          <LiquidToggle
+            checked={stdioBridgeSandbox}
+            onChange={setStdioBridgeSandbox}
+            label="Stdio Bridge Isolation"
+            description="Runs process child pipes inside verified isolated sandbox environment."
+          />
+        </div>
+      </div>
+
+      {/* Navigation Tabs (rareui FolderComponent style) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 select-none">
+        {tabItems.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 shrink-0 ${
+                isActive
+                  ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 shadow-md shadow-zinc-900/10 dark:shadow-white/10 scale-[1.02]"
+                  : "bg-white dark:bg-[#121316] text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 border border-zinc-200/80 dark:border-white/[0.08]"
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab 1: Client Configurations */}
       {activeTab === "config" && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Antigravity */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-4 shadow-sm flex flex-col justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                    <Bot className="w-4 h-4 text-emerald-500" /> Google Antigravity
-                  </span>
-                  <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md font-mono">
-                    .gemini/settings.json
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Configures Antigravity CLI and IDE agents to connect directly via stdio.
-                </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* Antigravity */}
+          <div className="bg-white dark:bg-[#101115] border border-zinc-200/80 dark:border-white/[0.08] rounded-2xl p-5 space-y-4 shadow-xs flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-emerald-500" /> Google Antigravity
+                </span>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md font-mono">
+                  .gemini/settings.json
+                </span>
               </div>
-              <div className="relative group">
-                <pre className="bg-zinc-950 text-emerald-400 p-3 rounded-xl text-[11px] font-mono overflow-x-auto max-h-48 scrollbar-thin">
-                  {antigravityConfig}
-                </pre>
-                <button
-                  onClick={() => handleCopy(antigravityConfig, "antigravity")}
-                  className="absolute top-2 right-2 p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors"
-                >
-                  {copiedKey === "antigravity" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                Connects Antigravity CLI and IDE agents directly to the Velurix MCP server via stdio.
+              </p>
             </div>
-
-            {/* Claude Desktop */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-4 shadow-sm flex flex-col justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                    <Bot className="w-4 h-4 text-emerald-500" /> Claude Desktop
-                  </span>
-                  <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md font-mono">
-                    claude_desktop_config.json
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Integrates all 49 tools directly into Anthropic's Claude Desktop UI app.
-                </p>
-              </div>
-              <div className="relative group">
-                <pre className="bg-zinc-950 text-emerald-400 p-3 rounded-xl text-[11px] font-mono overflow-x-auto max-h-48 scrollbar-thin">
-                  {claudeConfig}
-                </pre>
-                <button
-                  onClick={() => handleCopy(claudeConfig, "claude")}
-                  className="absolute top-2 right-2 p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors"
-                >
-                  {copiedKey === "claude" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-              </div>
+            <div className="relative group">
+              <pre className="bg-zinc-950 text-emerald-400 p-3.5 rounded-xl text-[11px] font-mono overflow-x-auto max-h-48 border border-zinc-800">
+                {antigravityConfig}
+              </pre>
+              <button
+                onClick={() => handleCopy(antigravityConfig, "antigravity")}
+                className="absolute top-2.5 right-2.5 p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors"
+                title="Copy JSON configuration"
+              >
+                {copiedKey === "antigravity" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
             </div>
+          </div>
 
-            {/* Hermes Agent */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-4 shadow-sm flex flex-col justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-emerald-500" /> Hermes Agent
-                  </span>
-                  <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md font-mono">
-                    hermes_mcp_config.json
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Empowers Hermes AI agent with automated WhatsApp login & campaign execution.
-                </p>
+          {/* Claude Desktop */}
+          <div className="bg-white dark:bg-[#101115] border border-zinc-200/80 dark:border-white/[0.08] rounded-2xl p-5 space-y-4 shadow-xs flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-emerald-500" /> Claude Desktop
+                </span>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md font-mono">
+                  claude_desktop_config.json
+                </span>
               </div>
-              <div className="relative group">
-                <pre className="bg-zinc-950 text-emerald-400 p-3 rounded-xl text-[11px] font-mono overflow-x-auto max-h-48 scrollbar-thin">
-                  {hermesConfig}
-                </pre>
-                <button
-                  onClick={() => handleCopy(hermesConfig, "hermes")}
-                  className="absolute top-2 right-2 p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors"
-                >
-                  {copiedKey === "hermes" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                Integrates all 49 WhatsApp tools directly into Anthropic's Claude Desktop application.
+              </p>
+            </div>
+            <div className="relative group">
+              <pre className="bg-zinc-950 text-emerald-400 p-3.5 rounded-xl text-[11px] font-mono overflow-x-auto max-h-48 border border-zinc-800">
+                {claudeConfig}
+              </pre>
+              <button
+                onClick={() => handleCopy(claudeConfig, "claude")}
+                className="absolute top-2.5 right-2.5 p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors"
+                title="Copy JSON configuration"
+              >
+                {copiedKey === "claude" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Hermes Agent */}
+          <div className="bg-white dark:bg-[#101115] border border-zinc-200/80 dark:border-white/[0.08] rounded-2xl p-5 space-y-4 shadow-xs flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-emerald-500" /> Hermes Agent
+                </span>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md font-mono">
+                  hermes_mcp_config.json
+                </span>
               </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                Empowers autonomous Hermes agents with automated WhatsApp QR login & bulk campaigns.
+              </p>
+            </div>
+            <div className="relative group">
+              <pre className="bg-zinc-950 text-emerald-400 p-3.5 rounded-xl text-[11px] font-mono overflow-x-auto max-h-48 border border-zinc-800">
+                {hermesConfig}
+              </pre>
+              <button
+                onClick={() => handleCopy(hermesConfig, "hermes")}
+                className="absolute top-2.5 right-2.5 p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors"
+                title="Copy JSON configuration"
+              >
+                {copiedKey === "hermes" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Tab Content 2: Tools Dictionary */}
+      {/* Tab 2: Tools Dictionary */}
       {activeTab === "tools" && (
-        <div className="space-y-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="space-y-5">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-3">
             {/* Category Filter Pills */}
             <div className="flex flex-wrap items-center gap-1.5">
               {categories.map((cat) => (
@@ -347,8 +333,8 @@ export default function McpDocsPage() {
                   onClick={() => setSelectedCategory(cat)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                     selectedCategory === cat
-                      ? "bg-emerald-500 text-white shadow-sm"
-                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                      ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 shadow-sm"
+                      : "bg-white dark:bg-[#121316] text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-white/5 border border-zinc-200/80 dark:border-white/[0.08]"
                   }`}
                 >
                   {cat}
@@ -356,15 +342,12 @@ export default function McpDocsPage() {
               ))}
             </div>
 
-            {/* Search Input */}
-            <div className="relative w-full md:w-64">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-              <input
-                type="text"
-                placeholder="Search tools..."
+            {/* Magnifying Glass Search */}
+            <div className="w-full md:w-64">
+              <MagnifyingGlass
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-emerald-500"
+                onChange={setSearchQuery}
+                placeholder="Search tools..."
               />
             </div>
           </div>
@@ -373,13 +356,13 @@ export default function McpDocsPage() {
             {filteredTools.map((tool) => (
               <div
                 key={tool.name}
-                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 space-y-2 hover:border-emerald-500/50 transition-colors shadow-sm"
+                className="bg-white dark:bg-[#101115] border border-zinc-200/80 dark:border-white/[0.08] hover:border-emerald-500/40 rounded-2xl p-4 space-y-2 transition-all shadow-xs group"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
                     {tool.name}
                   </span>
-                  <span className="text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-500 px-2 py-0.5 rounded-md">
+                  <span className="text-[10px] bg-zinc-100 dark:bg-white/5 text-zinc-500 dark:text-zinc-400 px-2 py-0.5 rounded-md font-medium">
                     {tool.category}
                   </span>
                 </div>
@@ -392,11 +375,11 @@ export default function McpDocsPage() {
         </div>
       )}
 
-      {/* Tab Content 3: Hermes QR Login Flow */}
+      {/* Tab 3: Hermes QR Login Flow */}
       {activeTab === "qr" && (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 md:p-8 space-y-6 shadow-sm">
-          <div className="space-y-2">
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+        <div className="bg-white dark:bg-[#101115] border border-zinc-200/80 dark:border-white/[0.08] rounded-2xl p-6 md:p-8 space-y-6 shadow-xs">
+          <div className="space-y-1">
+            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
               <QrCode className="w-5 h-5 text-emerald-500" /> WhatsApp QR Code Login Flow for AI Agents
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-3xl">
@@ -404,64 +387,64 @@ export default function McpDocsPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
-            <div className="bg-zinc-50 dark:bg-zinc-950 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 space-y-3">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-500 font-bold text-xs flex items-center justify-center">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            <div className="bg-zinc-50 dark:bg-[#14151a] p-5 rounded-2xl border border-zinc-200/80 dark:border-white/[0.06] space-y-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center">
                 1
               </div>
               <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
                 Call `login_whatsapp`
               </h3>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                The agent calls `login_whatsapp(session_name)`. The tool creates a session, starts Baileys, generates the QR, and returns a base64 PNG data URI (`data:image/png;base64,...`).
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                The agent calls <code>login_whatsapp(session_name)</code>. The tool creates a session, starts Baileys, generates the QR, and returns a base64 PNG data URI.
               </p>
             </div>
 
-            <div className="bg-zinc-50 dark:bg-zinc-950 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 space-y-3">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-500 font-bold text-xs flex items-center justify-center">
+            <div className="bg-zinc-50 dark:bg-[#14151a] p-5 rounded-2xl border border-zinc-200/80 dark:border-white/[0.06] space-y-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center">
                 2
               </div>
               <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
                 Display QR Image
               </h3>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
                 The agent presents the rendered QR image block inline to the user in chat. The user opens WhatsApp on phone ➔ Linked Devices ➔ Scans QR code.
               </p>
             </div>
 
-            <div className="bg-zinc-50 dark:bg-zinc-950 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 space-y-3">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-500 font-bold text-xs flex items-center justify-center">
+            <div className="bg-zinc-50 dark:bg-[#14151a] p-5 rounded-2xl border border-zinc-200/80 dark:border-white/[0.06] space-y-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center">
                 3
               </div>
               <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
                 Poll `check_login_status`
               </h3>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                The agent polls `check_login_status(session_id)` every 3s. As soon as the user scans, status transitions to `CONNECTED` with account phone number and display name.
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                The agent polls <code>check_login_status(session_id)</code>. As soon as the user scans, status transitions to <code>CONNECTED</code> with account phone number and display name.
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Tab Content 4: Antigravity Skill */}
+      {/* Tab 4: Antigravity Skill */}
       {activeTab === "skill" && (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 md:p-8 space-y-6 shadow-sm">
-          <div className="flex items-center justify-between">
+        <div className="bg-white dark:bg-[#101115] border border-zinc-200/80 dark:border-white/[0.08] rounded-2xl p-6 md:p-8 space-y-6 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-1">
-              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                 <Cpu className="w-5 h-5 text-emerald-500" /> Installed Antigravity Agent Skill
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Location: <code className="bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded text-emerald-500">C:\Users\subho\.gemini\config\skills\reachout-mcp-control\SKILL.md</code>
+                Location: <code className="bg-zinc-100 dark:bg-white/10 px-2 py-0.5 rounded text-emerald-500">C:\Users\subho\.gemini\config\skills\reachout-mcp-control\SKILL.md</code>
               </p>
             </div>
-            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20">
+            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20 w-fit">
               <CheckCircle2 className="w-3.5 h-3.5" /> Installed & Active
             </span>
           </div>
 
-          <div className="bg-zinc-950 text-emerald-400 p-4 rounded-2xl text-xs font-mono overflow-x-auto space-y-2">
+          <div className="bg-zinc-950 text-emerald-400 p-4 rounded-xl text-xs font-mono overflow-x-auto space-y-2 border border-zinc-800">
             <div className="text-zinc-500"># Skill Prompt Usage Examples:</div>
             <div>"Use reachout MCP to login a new WhatsApp session named MarketingAcc"</div>
             <div>"Create and start a campaign named Q3Leads using session_123 with 30s jitter delay"</div>
@@ -470,19 +453,19 @@ export default function McpDocsPage() {
         </div>
       )}
 
-      {/* Tab Content 5: Docker / Podman Deployment */}
+      {/* Tab 5: Podman / Docker Deployment */}
       {activeTab === "docker" && (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 md:p-8 space-y-6 shadow-sm">
-          <div className="space-y-2">
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+        <div className="bg-white dark:bg-[#101115] border border-zinc-200/80 dark:border-white/[0.08] rounded-2xl p-6 md:p-8 space-y-6 shadow-xs">
+          <div className="space-y-1">
+            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
               <Server className="w-5 h-5 text-emerald-500" /> Containerized Podman / Docker Deployment
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              The MCP server executable is compiled during container image build and packaged inside `velurix-backend`.
+              The MCP server executable is compiled during container image build and packaged inside <code>velurix-backend</code>.
             </p>
           </div>
 
-          <div className="bg-zinc-950 text-emerald-400 p-4 rounded-2xl text-xs font-mono overflow-x-auto space-y-2">
+          <div className="bg-zinc-950 text-emerald-400 p-4 rounded-xl text-xs font-mono overflow-x-auto space-y-2 border border-zinc-800">
             <div className="text-zinc-500"># Run MCP Server directly from running Podman container:</div>
             <div>wsl podman exec -it velurix-backend node /app/apps/mcp-server/dist/index.js</div>
           </div>
