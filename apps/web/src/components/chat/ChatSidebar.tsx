@@ -6,6 +6,7 @@ import { Chat, Contact } from '@/types/chat';
 import { ChatItem } from './ChatItem';
 import { apiClient } from '@/lib/api-client';
 import { useQueryClient } from '@tanstack/react-query';
+import { ThreeDotsMenu, MenuItem } from '@/components/ui/ThreeDotsMenu';
 import {
   Search,
   Plus,
@@ -15,7 +16,10 @@ import {
   Smartphone,
   AlertCircle,
   Radio,
-  Sparkles,
+  CircleDashed,
+  X,
+  Phone,
+  CheckCircle2,
 } from 'lucide-react';
 
 type TabType = 'chats' | 'groups' | 'channels' | 'status';
@@ -53,6 +57,7 @@ export function ChatSidebar({
   const [activeTab, setActiveTab] = useState<TabType>('chats');
 
   const readySessions = sessions.filter((s) => s.status === 'READY');
+  const activeSession = sessions.find((s) => s.id === selectedSessionId);
 
   const contactMap = new Map<string, Contact>();
   contacts.forEach((c) => {
@@ -62,15 +67,22 @@ export function ChatSidebar({
     }
   });
 
-  // Calculate categorized counts
+  // Calculate categorized lists
   const chatsList = chats.filter(
-    (c) => !c.isGroup && !c.jid.endsWith('@g.us') && !c.jid.endsWith('@newsletter') && !c.jid.endsWith('@broadcast') && c.jid !== 'status@broadcast'
+    (c) =>
+      !c.isGroup &&
+      !c.jid.endsWith('@g.us') &&
+      !c.jid.endsWith('@newsletter') &&
+      !c.jid.endsWith('@broadcast') &&
+      c.jid !== 'status@broadcast'
   );
   const groupsList = chats.filter(
     (c) => c.isGroup || c.jid.endsWith('@g.us')
   );
   const channelsList = chats.filter((c) => c.jid.endsWith('@newsletter'));
-  const statusList = chats.filter((c) => c.jid.endsWith('@broadcast') || c.jid === 'status@broadcast');
+  const statusList = chats.filter(
+    (c) => c.jid.endsWith('@broadcast') || c.jid === 'status@broadcast'
+  );
 
   const getFilteredByTab = () => {
     switch (activeTab) {
@@ -134,80 +146,118 @@ export function ChatSidebar({
     }
   };
 
-  const tabs: { id: TabType; label: string; count: number; icon: React.ComponentType<{ className?: string }> }[] = [
+  const tabs: {
+    id: TabType;
+    label: string;
+    count: number;
+    icon: React.ComponentType<{ className?: string }>;
+  }[] = [
     { id: 'chats', label: 'Chats', count: chatsList.length, icon: MessageSquare },
     { id: 'groups', label: 'Groups', count: groupsList.length, icon: Users },
     { id: 'channels', label: 'Channels', count: channelsList.length, icon: Radio },
-    { id: 'status', label: 'Status', count: statusList.length, icon: Sparkles },
+    { id: 'status', label: 'Status', count: statusList.length, icon: CircleDashed },
+  ];
+
+  // 3-dots menu options for authentic WhatsApp management
+  const menuItems: MenuItem[] = [
+    {
+      label: 'New conversation',
+      icon: Plus,
+      onClick: onOpenNewChat,
+      disabled: !selectedSessionId,
+    },
+    {
+      label: isSyncingChats ? 'Syncing conversations...' : 'Sync conversations',
+      icon: RefreshCw,
+      onClick: handleSyncChats,
+      disabled: !selectedSessionId || isSyncingChats,
+    },
+    {
+      label: isSyncingContacts ? 'Syncing contacts...' : 'Sync contacts & address book',
+      icon: Users,
+      onClick: handleSyncContacts,
+      disabled: !selectedSessionId || isSyncingContacts,
+    },
   ];
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-[#0c0c0e]">
-      {/* Header with Session Dropdown & Sync Buttons */}
-      <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 space-y-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="font-bold text-sm text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-emerald-500" />
-            Messaging
-          </h2>
+    <div className="flex flex-col h-full bg-white dark:bg-[#0c0d10] relative select-none">
+      {/* WhatsApp Header */}
+      <div className="p-3.5 border-b border-zinc-200/80 dark:border-white/[0.08] space-y-3 bg-white/80 dark:bg-[#0c0d10]/80 backdrop-blur-md">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-sm">
+              <MessageSquare className="w-4 h-4 fill-emerald-500/20" />
+            </div>
+            <div>
+              <h2 className="font-bold text-sm tracking-tight text-zinc-900 dark:text-zinc-100">
+                WhatsApp
+              </h2>
+              {activeSession && (
+                <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 dark:text-zinc-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="font-mono">
+                    {activeSession.phoneNumber ? `+${activeSession.phoneNumber}` : activeSession.name}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="flex items-center gap-1">
+            {/* Quick New Chat Button */}
+            <button
+              onClick={onOpenNewChat}
+              disabled={!selectedSessionId}
+              title="New Chat"
+              className="p-1.5 rounded-xl text-zinc-600 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 disabled:opacity-40 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+
+            {/* Quick Refresh Status */}
             <button
               onClick={handleSyncChats}
               disabled={!selectedSessionId || isSyncingChats}
-              title="Sync Chats"
-              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 transition-colors"
+              title="Sync Conversations"
+              className="p-1.5 rounded-xl text-zinc-600 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 disabled:opacity-40 transition-colors"
             >
               <RefreshCw
                 className={`w-3.5 h-3.5 ${isSyncingChats ? 'animate-spin text-emerald-500' : ''}`}
               />
             </button>
-            <button
-              onClick={handleSyncContacts}
-              disabled={!selectedSessionId || isSyncingContacts}
-              title="Sync Contacts"
-              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 transition-colors"
-            >
-              <Users
-                className={`w-3.5 h-3.5 ${isSyncingContacts ? 'animate-spin text-emerald-500' : ''}`}
-              />
-            </button>
-            <button
-              onClick={onOpenNewChat}
-              disabled={!selectedSessionId}
-              title="Start New Chat"
-              className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium disabled:opacity-40 transition-colors shadow-sm ml-1"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
+
+            {/* Authentic Three Dots WhatsApp Menu */}
+            <ThreeDotsMenu items={menuItems} title="WhatsApp Options" />
           </div>
         </div>
 
-        {/* Session Selector */}
-        <div>
-          {readySessions.length > 0 ? (
-            <div className="relative">
-              <select
-                value={selectedSessionId}
-                onChange={(e) => onSelectSession(e.target.value)}
-                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 text-xs rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
-              >
-                {readySessions.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.phoneNumber ? `+${s.phoneNumber}` : 'Connected'})
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>No READY session available. Please authenticate a session first.</span>
-            </div>
-          )}
-        </div>
+        {/* Session Selector (if multiple ready sessions) */}
+        {readySessions.length > 1 && (
+          <div className="relative">
+            <select
+              value={selectedSessionId}
+              onChange={(e) => onSelectSession(e.target.value)}
+              className="w-full bg-zinc-100/80 dark:bg-zinc-900/90 border border-zinc-200/80 dark:border-white/[0.08] text-zinc-900 dark:text-zinc-100 text-xs rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-emerald-500 font-medium cursor-pointer"
+            >
+              {readySessions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.phoneNumber ? `+${s.phoneNumber}` : 'Ready'})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
-        {/* Categorized Filter Tabs */}
-        <div className="grid grid-cols-4 gap-1 p-1 bg-zinc-100 dark:bg-zinc-900/80 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50">
+        {readySessions.length === 0 && (
+          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>No active WhatsApp session. Authenticate in Sessions page.</span>
+          </div>
+        )}
+
+        {/* Sliding Tab Pill Bar (bencho.dev & rareui inspired) */}
+        <div className="grid grid-cols-4 gap-1 p-1 bg-zinc-100/90 dark:bg-[#121316] rounded-xl border border-zinc-200/60 dark:border-white/[0.06]">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -215,10 +265,10 @@ export function ChatSidebar({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-lg text-[11px] font-semibold transition-all relative ${
+                className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-lg text-[11px] font-semibold transition-all duration-200 relative ${
                   isActive
-                    ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-xs border border-zinc-200/80 dark:border-zinc-700/80 scale-[1.02]'
-                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                    ? 'bg-white dark:bg-zinc-800/90 text-emerald-600 dark:text-emerald-400 shadow-sm border border-zinc-200/70 dark:border-white/10'
+                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-white/40 dark:hover:bg-white/5'
                 }`}
               >
                 <div className="flex items-center gap-1">
@@ -230,7 +280,7 @@ export function ChatSidebar({
                     className={`mt-0.5 text-[9px] px-1.5 py-0.2 rounded-full font-bold leading-none ${
                       isActive
                         ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                        : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400'
+                        : 'bg-zinc-200 dark:bg-zinc-700/60 text-zinc-600 dark:text-zinc-400'
                     }`}
                   >
                     {tab.count}
@@ -241,7 +291,7 @@ export function ChatSidebar({
           })}
         </div>
 
-        {/* Search Input */}
+        {/* Search Input Bar */}
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
           <input
@@ -249,28 +299,36 @@ export function ChatSidebar({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={`Search ${activeTab}...`}
-            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 text-xs rounded-xl pl-9 pr-3 py-2 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full bg-zinc-100/80 dark:bg-[#121316] border border-zinc-200/80 dark:border-white/[0.08] text-zinc-900 dark:text-zinc-100 text-xs rounded-xl pl-9 pr-8 py-2 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-emerald-500/80 focus:border-emerald-500 transition-all"
           />
+          {searchQuery && (
+            <button
+              onClick={() => onSearchChange('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-md"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Chat List */}
-      <div className="flex-1 overflow-y-auto relative">
+      {/* Chat List Scrollable View */}
+      <div className="flex-1 overflow-y-auto relative divide-y divide-zinc-100 dark:divide-white/[0.04]">
         {isLoadingChats ? (
-          <div className="p-8 text-center text-xs text-zinc-400 flex flex-col items-center gap-2">
+          <div className="p-12 text-center text-xs text-zinc-400 flex flex-col items-center gap-2.5">
             <RefreshCw className="w-5 h-5 animate-spin text-emerald-500" />
             <span>Loading conversations...</span>
           </div>
         ) : filteredChats.length === 0 ? (
-          <div className="p-8 text-center text-xs text-zinc-400 flex flex-col items-center gap-2">
-            <Smartphone className="w-8 h-8 opacity-30 text-zinc-400" />
-            <span>{searchQuery ? 'No matching chats found' : 'No chats found for this session'}</span>
+          <div className="p-12 text-center text-xs text-zinc-400 flex flex-col items-center gap-3">
+            <Smartphone className="w-9 h-9 opacity-25 text-zinc-400" />
+            <span>{searchQuery ? 'No matching conversations' : `No ${activeTab} found`}</span>
             {selectedSessionId && !searchQuery && (
               <button
                 onClick={onOpenNewChat}
-                className="mt-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+                className="mt-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1.5"
               >
-                + Start a new chat
+                <Plus className="w-3.5 h-3.5" /> Start a new conversation
               </button>
             )}
           </div>
@@ -288,6 +346,17 @@ export function ChatSidebar({
           </div>
         )}
       </div>
+
+      {/* Floating Action Button (FAB) for WhatsApp Mobile Ergonomics */}
+      <button
+        onClick={onOpenNewChat}
+        disabled={!selectedSessionId}
+        title="Start new conversation"
+        aria-label="Start new conversation"
+        className="absolute bottom-5 right-5 z-20 w-12 h-12 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl shadow-emerald-600/30 flex items-center justify-center transition-all duration-200 active:scale-95 hover:scale-105 border border-emerald-400/40 disabled:opacity-40 disabled:pointer-events-none"
+      >
+        <Plus className="w-5 h-5 stroke-[2.5]" />
+      </button>
     </div>
   );
 }
