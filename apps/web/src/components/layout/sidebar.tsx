@@ -75,7 +75,7 @@ export function Sidebar({
 
   return (
     <aside
-      className={`relative bg-white dark:bg-[#0c0c0e] border border-zinc-200/90 dark:border-zinc-800/80 rounded-2xl flex flex-col transition-all duration-300 z-20 shrink-0 select-none overflow-hidden shadow-sm dark:shadow-xl ${
+      className={`hidden md:flex relative bg-white dark:bg-[#0c0c0e] border border-zinc-200/90 dark:border-zinc-800/80 rounded-2xl flex-col transition-all duration-300 z-20 shrink-0 select-none overflow-hidden shadow-sm dark:shadow-xl ${
         isCollapsed ? "w-16" : "w-60"
       }`}
     >
