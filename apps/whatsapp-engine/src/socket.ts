@@ -38,16 +38,30 @@ export class EngineSocket {
   private pnToLid = new Map<string, string>();
   private idlePresenceTimer: NodeJS.Timeout | null = null;
   private sendQueue: Promise<any> = Promise.resolve();
+  private consecutiveSendCount = 0;
   private lastMessageSentAt = 0;
 
   private enqueueSend<T>(task: () => Promise<T>): Promise<T> {
     const runTask = async () => {
       const now = Date.now();
       const elapsed = now - this.lastMessageSentAt;
-      if (this.lastMessageSentAt > 0 && elapsed < 800) {
+
+      if (elapsed > 30000) {
+        this.consecutiveSendCount = 0;
+      }
+
+      this.consecutiveSendCount++;
+      // Anti-Bot / Organic Behavior: Every 5-7 rapid sends, simulate a human micro-break
+      if (this.consecutiveSendCount > 5) {
+        const microBreakMs = Math.floor(Math.random() * 4000) + 3500; // 3.5s - 7.5s organic break
+        console.error(`[Engine Socket] Organic human micro-break: pausing ${microBreakMs}ms after ${this.consecutiveSendCount} consecutive dispatches`);
+        await new Promise((resolve) => setTimeout(resolve, microBreakMs));
+        this.consecutiveSendCount = 0;
+      } else if (this.lastMessageSentAt > 0 && elapsed < 800) {
         const jitter = Math.floor(Math.random() * 400) + (800 - elapsed);
         await new Promise((resolve) => setTimeout(resolve, jitter));
       }
+
       try {
         return await task();
       } finally {
@@ -139,6 +153,11 @@ export class EngineSocket {
       if (keysToRead.length > 0) {
         const recentKeys = keysToRead.slice(-20);
         console.error(`[Engine Socket] Sending read receipts for ${recentKeys.length} messages in chat ${targetJid}`);
+        try {
+          await this.sock.sendPresenceUpdate('available');
+          const readGlanceMs = Math.floor(Math.random() * 400) + 300; // 300-700ms human glance delay
+          await new Promise((resolve) => setTimeout(resolve, readGlanceMs));
+        } catch (_) {}
         await this.sock.readMessages(recentKeys);
       }
 
@@ -146,6 +165,7 @@ export class EngineSocket {
       if (chat) {
         chat.unreadCount = 0;
       }
+      this.resetIdlePresence();
 
       try {
         if ((this.sock as any).chatModify) {
@@ -956,6 +976,9 @@ export class EngineSocket {
           if ((this.sock as any)?.assertSessions) {
             await (this.sock as any).assertSessions([targetJid]);
           }
+          await this.sock.sendPresenceUpdate('available');
+          const preTypingDelay = Math.floor(Math.random() * 350) + 250; // 250-600ms chat opening & thought delay
+          await new Promise((resolve) => setTimeout(resolve, preTypingDelay));
           await this.sock.presenceSubscribe(targetJid);
           await this.sock.sendPresenceUpdate('composing', targetJid);
           const charSpeed = Math.floor(Math.random() * 15) + 20; // 20-35ms per character
@@ -1324,6 +1347,9 @@ export class EngineSocket {
           if ((this.sock as any)?.assertSessions) {
             await (this.sock as any).assertSessions([targetJid]);
           }
+          await this.sock.sendPresenceUpdate('available');
+          const preMediaDelay = Math.floor(Math.random() * 300) + 250; // 250-550ms chat opening delay
+          await new Promise((resolve) => setTimeout(resolve, preMediaDelay));
           await this.sock.presenceSubscribe(targetJid);
           const presenceState = mediaType === 'audio' ? 'recording' : 'composing';
           await this.sock.sendPresenceUpdate(presenceState, targetJid);
