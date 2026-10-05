@@ -163,7 +163,7 @@ export default function ChatPage() {
   const isSessionReady = activeSession ? activeSession.status !== 'FAILED' && activeSession.status !== 'STOPPED' && activeSession.status !== 'DELETED' : false;
 
   return (
-    <div className="-m-6 md:-m-8 h-[calc(100vh-3.5rem-1.25rem)] overflow-hidden flex flex-col md:flex-row bg-white dark:bg-[#0c0c0e]">
+    <div className="w-full h-full overflow-hidden flex flex-col md:flex-row bg-white dark:bg-[#0c0c0e]">
       {/* Left Sidebar Panel */}
       <div
         className={`w-full md:w-[380px] shrink-0 border-r border-zinc-200 dark:border-zinc-800 flex flex-col h-full ${

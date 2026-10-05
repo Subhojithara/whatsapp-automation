@@ -2,11 +2,15 @@
 
 import { useWebSocket } from "@/hooks/use-websocket";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { LayoutGrid, Share2, RefreshCw } from "lucide-react";
+import { LayoutGrid, Share2, RefreshCw, Menu } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-export function Header() {
+interface HeaderProps {
+  onOpenMobileMenu?: () => void;
+}
+
+export function Header({ onOpenMobileMenu }: HeaderProps) {
   const { isConnected } = useWebSocket();
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -18,11 +22,20 @@ export function Header() {
   }
 
   return (
-    <header className="h-14 px-5 border-b border-zinc-200/80 dark:border-zinc-800/40 flex items-center justify-between bg-white dark:bg-[#0c0c0e] shrink-0 transition-colors duration-200">
+    <header className="h-14 px-3 md:px-5 border-b border-zinc-200/80 dark:border-zinc-800/40 flex items-center justify-between bg-white dark:bg-[#0c0c0e] shrink-0 transition-colors duration-200">
       {/* Title & Layout Icon */}
       <div className="flex items-center gap-2 text-xs font-semibold text-zinc-900 dark:text-zinc-200">
-        <LayoutGrid className="w-4 h-4 text-zinc-500 dark:text-zinc-400" />
-        <span>WhatsApp Core Overview</span>
+        {onOpenMobileMenu && (
+          <button
+            onClick={onOpenMobileMenu}
+            className="md:hidden p-1.5 -ml-1 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+            title="Open navigation menu"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        )}
+        <LayoutGrid className="w-4 h-4 text-zinc-500 dark:text-zinc-400 hidden sm:block" />
+        <span className="truncate">WhatsApp Core Overview</span>
       </div>
 
       {/* Right Controls */}
