@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Session } from "@/types/session";
 import { StatusBadge } from "./status-badge";
 import {
@@ -12,6 +13,7 @@ import {
   ExternalLink,
   Loader2,
   MessageSquare,
+  MessagesSquare,
   Activity,
 } from "lucide-react";
 import { useState } from "react";
@@ -60,8 +62,26 @@ export function SessionCard({
       {/* Card Top */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center shrink-0 text-zinc-700 dark:text-zinc-300">
-            <MessageSquare className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />
+          {/* Engine-state ring: the mark glows with the session's own
+              status, so a wall of cards reads healthy or not at a glance */}
+          <div
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-zinc-100 dark:bg-zinc-900 border ${
+              isReady
+                ? "border-emerald-500/40 ring-2 ring-emerald-500/15"
+                : isConnecting
+                ? "border-amber-500/40 ring-2 ring-amber-500/15 animate-pulse"
+                : "border-zinc-200 dark:border-zinc-800"
+            } text-zinc-700 dark:text-zinc-300`}
+          >
+            <MessageSquare
+              className={`w-5 h-5 ${
+                isReady
+                  ? "text-emerald-500 dark:text-emerald-400"
+                  : isConnecting
+                  ? "text-amber-500"
+                  : "text-zinc-400 dark:text-zinc-600"
+              }`}
+            />
           </div>
           <div className="space-y-0.5 min-w-0">
             <h3
@@ -169,12 +189,21 @@ export function SessionCard({
       <div className="flex items-center gap-2 pt-1">
         {isReady ? (
           <>
+            {/* Connected sessions go straight to the conversation —
+                chat is the natural next step from a READY engine */}
+            <Link
+              href="/dashboard/chat"
+              className="flex-1 py-2 px-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold text-xs rounded-xl border border-emerald-500/25 transition-colors flex items-center justify-center gap-1.5"
+            >
+              <MessagesSquare className="w-3.5 h-3.5" />
+              <span>Open Chat</span>
+            </Link>
             <button
               onClick={() => onSelect(session)}
               className="flex-1 py-2 px-3 bg-zinc-100 dark:bg-zinc-800/90 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-semibold text-xs rounded-xl border border-zinc-200 dark:border-zinc-700/60 transition-colors flex items-center justify-center gap-1.5"
             >
               <ExternalLink className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
-              <span>Session Details</span>
+              <span>Details</span>
             </button>
             <button
               onClick={() => handleAction("restart")}

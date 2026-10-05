@@ -74,6 +74,22 @@ export default function SessionsPage() {
     return true;
   });
 
+  // Fleet health summary — the chips below double as filters, so a
+  // glance at the counts is also one click away from the list itself
+  const readyCount = sessions.filter((s) => s.status === "READY").length;
+  const connectingCount = sessions.filter((s) =>
+    ["STARTING", "CONNECTING", "AUTHENTICATING", "RECONNECTING"].includes(s.status)
+  ).length;
+  const inactiveCount = sessions.filter((s) =>
+    ["STOPPED", "FAILED", "DISCONNECTED"].includes(s.status)
+  ).length;
+
+  const healthChips = [
+    { label: "Ready", count: readyCount, dot: "bg-emerald-500", filter: "READY" },
+    { label: "Connecting", count: connectingCount, dot: "bg-amber-500", filter: "CONNECTING" },
+    { label: "Inactive", count: inactiveCount, dot: "bg-zinc-400 dark:bg-zinc-600", filter: "INACTIVE" },
+  ];
+
   return (
     <div className="max-w-5xl mx-auto space-y-10 py-4">
       {/* Hero Heading */}
@@ -84,6 +100,25 @@ export default function SessionsPage() {
         <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-md mx-auto">
           Manage multi-account WhatsApp sessions, QR authentication, and realtime IPC state supervision.
         </p>
+      </div>
+
+      {/* Fleet Health Summary — click a chip to filter the grid */}
+      <div className="flex items-center justify-center flex-wrap gap-2.5 -mt-4">
+        {healthChips.map((chip) => (
+          <button
+            key={chip.label}
+            onClick={() => setStatusFilter(chip.filter)}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium border transition-all ${
+              statusFilter === chip.filter
+                ? "bg-zinc-900 dark:bg-zinc-800 text-zinc-50 dark:text-zinc-100 border-zinc-900 dark:border-zinc-600 shadow-sm"
+                : "bg-white dark:bg-zinc-900/40 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800/80 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${chip.dot} ${chip.label === "Ready" ? "animate-pulse" : ""}`} />
+            <span className="font-mono font-bold">{chip.count}</span>
+            <span>{chip.label}</span>
+          </button>
+        ))}
       </div>
 
       {/* Search Prompt Box */}

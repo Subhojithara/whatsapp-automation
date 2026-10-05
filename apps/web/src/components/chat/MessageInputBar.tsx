@@ -228,33 +228,46 @@ export function MessageInputBar({
 
       {/* Emoji Picker Popover */}
       {showEmojiPicker && (
-        <div className="absolute bottom-16 left-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-3 shadow-xl z-30 max-w-xs">
-          <div className="flex items-center justify-between mb-2 pb-1 border-b border-zinc-100 dark:border-zinc-800">
-            <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Emojis</span>
-            <button
-              onClick={() => setShowEmojiPicker(false)}
-              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="grid grid-cols-6 gap-1.5 max-h-44 overflow-y-auto p-1">
-            {COMMON_EMOJIS.map((emoji) => (
+        <>
+          {/* invisible backdrop: any click outside the picker closes it,
+              the same way the session card's menu dismisses */}
+          <div
+            className="fixed inset-0 z-20"
+            onClick={() => setShowEmojiPicker(false)}
+          />
+          <div className="absolute bottom-16 left-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-3 shadow-xl z-30 max-w-xs">
+            <div className="flex items-center justify-between mb-2 pb-1 border-b border-zinc-100 dark:border-zinc-800">
+              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Emojis</span>
               <button
-                key={emoji}
-                onClick={() => handleInsertEmoji(emoji)}
-                className="text-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 p-1.5 rounded-lg transition-colors text-center select-none"
+                onClick={() => setShowEmojiPicker(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
               >
-                {emoji}
+                <X className="w-3.5 h-3.5" />
               </button>
-            ))}
+            </div>
+            <div className="grid grid-cols-6 gap-1.5 max-h-44 overflow-y-auto p-1">
+              {COMMON_EMOJIS.map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => handleInsertEmoji(emoji)}
+                  className="text-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 p-1.5 rounded-lg transition-colors text-center select-none"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Attach File Menu Popover */}
       {showAttachMenu && (
-        <div className="absolute bottom-16 left-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-2 shadow-xl z-30 flex flex-col gap-1 min-w-[150px]">
+        <>
+          <div
+            className="fixed inset-0 z-20"
+            onClick={() => setShowAttachMenu(false)}
+          />
+          <div className="absolute bottom-16 left-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-2 shadow-xl z-30 flex flex-col gap-1 min-w-[150px]">
           <button
             onClick={() => triggerFileSelect('image')}
             className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors font-medium"
@@ -290,7 +303,8 @@ export function MessageInputBar({
             <Sticker className="w-4 h-4 text-rose-500" />
             <span>Sticker</span>
           </button>
-        </div>
+          </div>
+        </>
       )}
 
       {/* Main Bar / Voice Recording Bar */}

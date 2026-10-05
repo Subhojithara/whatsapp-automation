@@ -1,25 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Layers,
   Plus,
-  Play,
-  Pause,
-  Square,
-  RotateCcw,
   ShieldAlert,
-  BarChart3,
-  RefreshCw,
-  MoreVertical,
   CheckCircle2,
-  AlertTriangle,
   Send,
+  RefreshCw,
+  SearchX,
   Users,
-  Eye,
-  Trash2,
-  Copy,
-  Download,
 } from "lucide-react";
 import { Campaign } from "@/types/campaign";
 import { Session } from "@/types/session";
@@ -27,6 +17,13 @@ import { apiClient } from "@/lib/api-client";
 import { NewCampaignWizard } from "@/components/campaigns/NewCampaignWizard";
 import { CampaignDetailPanel } from "@/components/campaigns/CampaignDetailPanel";
 import { BlacklistModal } from "@/components/campaigns/BlacklistModal";
+import { TaskList } from "@/components/ui/TaskList";
+import { FolderComponent, type FolderFilter } from "@/components/ui/FolderComponent";
+import { GitHubActivity } from "@/components/ui/GitHubActivity";
+import { MagnifyingGlass } from "@/components/ui/MagnifyingGlass";
+import { TouchMe } from "@/components/ui/TouchMe";
+import { ShimmerButton } from "@/components/ui/ShimmerButton";
+import { LiquidButton } from "@/components/ui/liquid-glass-button";
 
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -38,6 +35,10 @@ export default function CampaignsPage() {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [isBlacklistOpen, setIsBlacklistOpen] = useState(false);
   const [expandedCampaignId, setExpandedCampaignId] = useState<string | null>(null);
+
+  // List controls
+  const [folderFilter, setFolderFilter] = useState<FolderFilter>("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchData = async () => {
     setLoading(true);
@@ -102,11 +103,13 @@ export default function CampaignsPage() {
     }
   };
 
+  // Confirmation lives in the row's InlineConfirm control — by the
+  // time this runs, the user has already said yes.
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this campaign?")) return;
     try {
       await apiClient.deleteCampaign(id);
+      if (expandedCampaignId === id) setExpandedCampaignId(null);
       fetchData();
     } catch (err: any) {
       alert(`Failed to delete: ${err.message}`);
@@ -115,9 +118,40 @@ export default function CampaignsPage() {
 
   // Aggregated Stats
   const activeCount = campaigns.filter((c) => c.status === "RUNNING").length;
+  const pausedCount = campaigns.filter((c) => c.status === "PAUSED").length;
+  const completedCount = campaigns.filter((c) => c.status === "COMPLETED").length;
   const totalSent = campaigns.reduce((acc, c) => acc + c.sentCount, 0);
   const totalReplied = campaigns.reduce((acc, c) => acc + c.repliedCount, 0);
   const replyRate = totalSent > 0 ? Math.round((totalReplied / totalSent) * 100) : 0;
+
+  // Folder counts + filtered list
+  const counts = useMemo(
+    () => ({
+      all: campaigns.length,
+      running: activeCount,
+      paused: pausedCount,
+      completed: completedCount,
+    }),
+    [campaigns, activeCount, pausedCount, completedCount]
+  );
+
+  const filteredCampaigns = useMemo(() => {
+    return campaigns.filter((c) => {
+      const matchesFolder =
+        folderFilter === "ALL" ||
+        (folderFilter === "RUNNING" && c.status === "RUNNING") ||
+        (folderFilter === "PAUSED" && c.status === "PAUSED") ||
+        (folderFilter === "COMPLETED" && c.status === "COMPLETED");
+      if (!matchesFolder) return false;
+
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        c.name.toLowerCase().includes(q) ||
+        c.status.toLowerCase().includes(q)
+      );
+    });
+  }, [campaigns, folderFilter, searchQuery]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -133,30 +167,30 @@ export default function CampaignsPage() {
           </p>
         </div>
 
+        {/* Primary page actions */}
         <div className="flex items-center gap-2.5">
-          <button
+          <TouchMe
+            variant="secondary"
             onClick={() => setIsBlacklistOpen(true)}
-            className="px-3.5 py-2 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-rose-500 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+            title="Blacklist Manager"
           >
-            <ShieldAlert className="w-4 h-4" />
-            Blacklist Manager
-          </button>
+            <ShieldAlert className="w-4 h-4 text-rose-500" />
+            <span className="hidden sm:inline">Blacklist</span>
+          </TouchMe>
 
-          <button
+          <TouchMe
+            variant="secondary"
             onClick={fetchData}
-            className="p-2 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-xl transition-colors shadow-sm"
+            className="px-2.5"
             title="Refresh Data"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
+          </TouchMe>
 
-          <button
-            onClick={() => setIsWizardOpen(true)}
-            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
+          <ShimmerButton onClick={() => setIsWizardOpen(true)}>
+            <Plus className="w-4 h-4 stroke-[2.5]" />
             New Campaign
-          </button>
+          </ShimmerButton>
         </div>
       </div>
 
@@ -215,178 +249,107 @@ export default function CampaignsPage() {
         </div>
       </div>
 
-      {/* Campaign List Table Section */}
-      <div className="bg-white dark:bg-[#0c0c0e] border border-zinc-200/90 dark:border-zinc-800/80 rounded-2xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-zinc-200/80 dark:border-zinc-800/80 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-emerald-500" />
-            All Campaigns ({campaigns.length})
-          </h2>
+      {/* Pacing Density & Primary Actions */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        <div className="lg:col-span-2">
+          <GitHubActivity
+            totalDelivered={totalSent}
+            activeCampaignsCount={activeCount}
+          />
         </div>
 
-        {error && (
-          <div className="p-4 bg-rose-500/10 border-b border-rose-500/20 text-rose-500 text-xs">
-            {error}
+        {/* Quick Launch Card */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#101115] border border-zinc-200/80 dark:border-white/[0.08] shadow-xs flex flex-col items-center justify-center gap-4 text-center">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <Users className="w-5 h-5" />
           </div>
-        )}
-
-        {campaigns.length === 0 ? (
-          <div className="p-12 text-center text-zinc-400 space-y-3">
-            <Layers className="w-12 h-12 mx-auto text-zinc-300 dark:text-zinc-700" />
-            <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-              No Campaigns Created Yet
+          <div className="space-y-1">
+            <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+              Launch a New Sequence
             </h3>
-            <p className="text-xs max-w-sm mx-auto">
-              Upload a CSV/Excel file to start your first anti-ban bulk messaging campaign with follow-up sequences.
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              Upload contacts, map columns and configure anti-ban pacing in four guided steps.
             </p>
-            <button
-              onClick={() => setIsWizardOpen(true)}
-              className="mt-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all shadow-md inline-block"
-            >
-              + Create First Campaign
-            </button>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-zinc-50 dark:bg-zinc-900/50 text-zinc-500 dark:text-zinc-400 border-b border-zinc-200/80 dark:border-zinc-800/80">
-                <tr>
-                  <th className="p-3.5 font-semibold">Campaign Name</th>
-                  <th className="p-3.5 font-semibold">Status</th>
-                  <th className="p-3.5 font-semibold">Progress</th>
-                  <th className="p-3.5 font-semibold">Sent / Total</th>
-                  <th className="p-3.5 font-semibold">Replied</th>
-                  <th className="p-3.5 font-semibold">Created At</th>
-                  <th className="p-3.5 font-semibold text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {campaigns.map((c) => {
-                  const progressPct =
-                    c.totalRecipients > 0
-                      ? Math.round((c.sentCount / c.totalRecipients) * 100)
-                      : 0;
-                  const isExpanded = expandedCampaignId === c.id;
-
-                  return (
-                    <tr
-                      key={c.id}
-                      className="border-b border-zinc-100 dark:border-zinc-800/50"
-                    >
-                      <td colSpan={7} className="p-0">
-                        {/* Campaign Row */}
-                        <div
-                          onClick={() => setExpandedCampaignId(isExpanded ? null : c.id)}
-                          className={`grid grid-cols-[1fr_100px_140px_100px_60px_90px_120px] gap-0 items-center cursor-pointer transition-colors ${
-                            isExpanded
-                              ? "bg-emerald-50/50 dark:bg-emerald-900/10"
-                              : "hover:bg-zinc-50/70 dark:hover:bg-zinc-800/20"
-                          }`}
-                        >
-                          <div className="p-3.5 font-bold text-zinc-900 dark:text-zinc-100">
-                            {c.name}
-                            <span className="block text-[10px] font-normal text-zinc-400 font-mono">
-                              {c.steps.length} steps • {c.antiBanConfig?.minDelaySecs || 30}-{c.antiBanConfig?.maxDelaySecs || 120}s jitter
-                            </span>
-                          </div>
-
-                          <div className="p-3.5">
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                c.status === "RUNNING"
-                                  ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 animate-pulse"
-                                  : c.status === "PAUSED"
-                                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
-                                  : c.status === "COMPLETED"
-                                  ? "bg-blue-500/10 text-blue-500 border border-blue-500/20"
-                                  : "bg-zinc-500/10 text-zinc-400 border border-zinc-500/20"
-                              }`}
-                            >
-                              {c.status}
-                            </span>
-                          </div>
-
-                          <div className="p-3.5">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 bg-zinc-200 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                                <div
-                                  className="bg-gradient-to-r from-emerald-400 to-emerald-600 h-full transition-all duration-1000 ease-out"
-                                  style={{ width: `${progressPct}%` }}
-                                />
-                              </div>
-                              <span className="font-mono text-[10px] text-zinc-500 font-bold">
-                                {progressPct}%
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="p-3.5 font-mono text-xs">
-                            <span className="text-emerald-500 font-bold">{c.sentCount}</span> / {c.totalRecipients}
-                          </div>
-
-                          <div className="p-3.5 font-mono text-xs text-blue-500 font-bold">
-                            {c.repliedCount}
-                          </div>
-
-                          <div className="p-3.5 text-zinc-400 text-[11px]">
-                            {new Date(c.createdAt).toLocaleDateString()}
-                          </div>
-
-                          <div className="p-3.5 text-right space-x-1" onClick={(e) => e.stopPropagation()}>
-                            {c.status === "RUNNING" ? (
-                              <button
-                                onClick={(e) => handlePause(c.id, e)}
-                                className="p-1.5 text-amber-500 hover:bg-amber-500/10 rounded-lg transition-colors"
-                                title="Pause"
-                              >
-                                <Pause className="w-3.5 h-3.5" />
-                              </button>
-                            ) : (
-                              <button
-                                onClick={(e) => handleStart(c.id, e)}
-                                disabled={c.status === "COMPLETED"}
-                                className="p-1.5 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors disabled:opacity-30"
-                                title="Start"
-                              >
-                                <Play className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-
-                            <button
-                              onClick={(e) => handleClone(c.id, e)}
-                              className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
-                              title="Clone"
-                            >
-                              <Copy className="w-3.5 h-3.5" />
-                            </button>
-
-                            <button
-                              onClick={(e) => handleDelete(c.id, e)}
-                              className="p-1.5 text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Inline Expandable Detail Panel */}
-                        {isExpanded && (
-                          <CampaignDetailPanel
-                            campaign={c}
-                            onRefresh={fetchData}
-                            onCollapse={() => setExpandedCampaignId(null)}
-                          />
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+          <LiquidButton
+            size="sm"
+            onClick={() => setIsWizardOpen(true)}
+            className="bg-emerald-500 text-white hover:bg-emerald-600"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+            New Campaign
+          </LiquidButton>
+        </div>
       </div>
+
+      {/* List Controls: folder tabs + search */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <FolderComponent
+          currentFilter={folderFilter}
+          onFilterChange={setFolderFilter}
+          counts={counts}
+        />
+        <div className="w-full md:w-64 shrink-0">
+          <MagnifyingGlass
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Search campaigns..."
+          />
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs rounded-2xl">
+          {error}
+        </div>
+      )}
+
+      {/* Campaign Task Cards */}
+      {campaigns.length === 0 ? (
+        <div className="p-12 text-center text-zinc-400 space-y-3 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-[#0c0c0e]/50">
+          <Layers className="w-12 h-12 mx-auto text-zinc-300 dark:text-zinc-700" />
+          <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+            No Campaigns Created Yet
+          </h3>
+          <p className="text-xs max-w-sm mx-auto">
+            Upload a CSV/Excel file to start your first anti-ban bulk messaging campaign with follow-up sequences.
+          </p>
+          <TouchMe onClick={() => setIsWizardOpen(true)} className="mt-2">
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            Create First Campaign
+          </TouchMe>
+        </div>
+      ) : filteredCampaigns.length === 0 ? (
+        <div className="p-12 text-center text-zinc-400 space-y-3 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-[#0c0c0e]/50">
+          <SearchX className="w-10 h-10 mx-auto text-zinc-300 dark:text-zinc-700" />
+          <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+            No Matching Campaigns
+          </h3>
+          <p className="text-xs max-w-sm mx-auto">
+            No campaigns match the current folder or search. Try a different filter.
+          </p>
+        </div>
+      ) : (
+        <TaskList
+          campaigns={filteredCampaigns}
+          selectedCampaignId={expandedCampaignId}
+          onSelectCampaign={(id) =>
+            setExpandedCampaignId(expandedCampaignId === id ? null : id)
+          }
+          onStart={handleStart}
+          onPause={handlePause}
+          onStop={handleStop}
+          onClone={handleClone}
+          onDelete={handleDelete}
+          renderExpanded={(c) => (
+            <CampaignDetailPanel
+              campaign={c}
+              onRefresh={fetchData}
+              onCollapse={() => setExpandedCampaignId(null)}
+            />
+          )}
+        />
+      )}
 
       {/* New Campaign Wizard Modal */}
       <NewCampaignWizard

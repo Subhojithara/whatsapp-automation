@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { Sidebar } from "@/components/layout/sidebar";
+import { NavSidebar } from "@/components/ui/NavSidebar";
 import { Header } from "@/components/layout/header";
 import { MobileDrawer } from "@/components/ui/MobileDrawer";
 
@@ -18,8 +18,8 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-zinc-100 dark:bg-[#09090b] p-0 md:p-2.5 gap-0 md:gap-2.5 antialiased transition-colors duration-200">
-      {/* Desktop Left Sidebar */}
-      <Sidebar
+      {/* Desktop Left Sidebar (rareui NavSidebar) */}
+      <NavSidebar
         isCollapsed={isCollapsed}
         onToggle={() => setIsCollapsed(!isCollapsed)}
       />

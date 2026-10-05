@@ -81,6 +81,335 @@
   }
 }
 
+/* ══ Bencho component token mapping ═════════════════════════
+   The Bencho blocks (Like, SlideToConfirm) read design tokens
+   they never define. They are mapped HERE to this project's
+   own palette — zinc ink, white cards, emerald signal — scoped
+   to the components' roots so nothing leaks out. Anything
+   ending -rgb is three bare numbers, because the CSS builds
+   rgba() from it. */
+.lk-frame,
+.sld {
+  --card: #ffffff;
+  --ink: #18181b; /* zinc-900 */
+  --ink-rgb: 24 24 27;
+  --ink-4: #a1a1aa; /* zinc-400 */
+  --fill-slab: #f4f4f5; /* zinc-100 slab */
+  --fill-on: #18181b;
+  --fill-on-rgb: 24 24 27;
+  --pane-edge: rgba(24, 24, 27, 0.1);
+  --signal: #10b981; /* emerald-500 — the project's live/ok colour */
+  --font-ui: inherit;
+}
+
+.dark .lk-frame,
+.dark .sld {
+  --card: #0c0c0e;
+  --ink: #f4f4f5; /* zinc-100 */
+  --ink-rgb: 244 244 245;
+  --ink-4: #71717a; /* zinc-500 */
+  --fill-slab: #27272a; /* zinc-800 slab */
+  --fill-on: #f4f4f5;
+  --fill-on-rgb: 244 244 245;
+  --pane-edge: rgba(244, 244, 245, 0.12);
+  --signal: #10b981;
+}
+
+/* ══ Like ═════════════════════════════════════════════════ */
+/* a fixed frame: the pill grows by a digit at 9,999 and the
+   block must not rescale on the wall when it does.
+   velurix: there is no scaling wall here, so the frame hugs
+   its content instead of reserving the bench's 240x130 tile. */
+.lk-frame {
+  width: max-content;
+  height: auto;
+  display: grid;
+  place-items: center;}
+
+.lk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 18px 0 15px;
+  border: 0;
+  border-radius: var(--r);
+  background: var(--fill-slab, var(--card));
+  color: var(--fill-on, var(--ink));
+  font: inherit;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: scale 200ms cubic-bezier(0.3, 0.9, 0.4, 1);}
+
+[data-stroke="on"] .lk { box-shadow: inset 0 0 0 1px var(--pane-edge); }
+
+.lk:active { scale: 0.95; }
+
+.lk:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--fill-slab, #fff), 0 0 0 4px var(--signal, #2231dd);}
+
+.lk-heart {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;}
+
+.lk-glyph { position: relative; z-index: 1; display: grid; }
+
+/* the heart is gone while the bloom happens, then springs in
+   from nothing, red, past its size and back */
+.lk-glyph[data-on] {
+  color: var(--lk-on);
+  /* the default landing: squeeze, swell past its size, settle */
+  animation: lk-pop 520ms cubic-bezier(0.3, 1.5, 0.4, 1) both;}
+
+.lk[data-fx="Bloom"] .lk-glyph[data-on] {
+  animation: lk-heart 760ms cubic-bezier(0.3, 1.6, 0.4, 1) both;}
+
+.lk-burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  pointer-events: none;}
+
+/* the bloom: a full disc that grows, then hollows out from the
+   middle into a ring and thins to nothing — a border as wide as
+   the radius is a disc, and a border going to 0 is the hole */
+.lk-bloom {
+  position: absolute;
+  left: -17px;
+  top: -17px;
+  width: 34px;
+  height: 34px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 17px solid #cc8ef5;
+  animation: lk-bloom 560ms cubic-bezier(0.25, 0.8, 0.35, 1) both;}
+
+.lk[data-color="Ink"] .lk-bloom { border-color: var(--lk-on); animation-name: lk-bloom-ink; }
+
+/* seven spokes, each a pair of dots, thrown as the ring opens */
+.lk-spoke {
+  position: absolute;
+  left: 0;
+  top: 0;
+  rotate: var(--a);}
+
+.lk-spoke i {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: var(--c);
+  animation: lk-dot 620ms cubic-bezier(0.2, 0.8, 0.3, 1) 200ms both;}
+
+/* the pair sits either side of the spoke, one a little behind */
+.lk-spoke i:first-child { --side: -4px; --far: 0px; }
+
+.lk-spoke i:last-child { --side: 4px; --far: -5px; width: 4px; height: 4px; margin: -2px 0 0 -2px; }
+
+/* ── Firework: up and out, then they fall ────── */
+.lk-fw {
+  position: absolute;
+  left: 0;
+  top: 0;
+  animation: lk-fw-x 1000ms cubic-bezier(0.2, 0.7, 0.4, 1) var(--d) both;}
+
+.lk-fw i {
+  position: absolute;
+  left: -2px;
+  top: -2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  animation: lk-fw-y 1000ms linear var(--d) both;}
+
+/* the count: one wheel per digit, each its own window */
+.lk-count {
+  display: flex;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;}
+
+.lk-wheel {
+  position: relative;
+  display: inline-block;
+  height: 1.25em;
+  overflow: hidden;}
+
+.lk-digit {
+  display: block;
+  line-height: 1.25em;}
+
+.lk-comma { line-height: 1.25em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lk-glyph[data-on], .lk-bloom, .lk-spoke i, .lk-fw, .lk-fw i { animation: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lk-burst { display: none; }
+}
+
+@keyframes lk-pop {
+  0% { scale: 0.6; }
+  45% { scale: 1.28; }
+  100% { scale: 1; }}
+
+@keyframes lk-heart {
+  0%, 28% { scale: 0; }
+  62% { scale: 1.25; }
+  100% { scale: 1; }}
+
+@keyframes lk-bloom {
+  0% { scale: 0.15; border-width: 17px; border-color: #e5484d; }
+  40% { scale: 1; border-width: 17px; border-color: #cc8ef5; }
+  75% { border-width: 2px; opacity: 1; }
+  100% { scale: 1.12; border-width: 0; opacity: 0; border-color: #cc8ef5; }}
+
+@keyframes lk-bloom-ink {
+  0% { scale: 0.15; border-width: 17px; }
+  40% { scale: 1; border-width: 17px; }
+  75% { border-width: 2px; opacity: 1; }
+  100% { scale: 1.12; border-width: 0; opacity: 0; }}
+
+@keyframes lk-dot {
+  0% { translate: 12px var(--side); scale: 1; opacity: 0; }
+  12% { opacity: 1; }
+  100% { translate: calc(18px + var(--fly) * 14px + var(--far)) calc(var(--side) * 1.6); scale: 0; opacity: 1; }}
+
+@keyframes lk-fw-x { from { translate: 0 0; } to { translate: var(--x) 0; } }
+
+@keyframes lk-fw-y {
+  0% { translate: 0 0; opacity: 1; animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1); }
+  45% { translate: 0 var(--y); opacity: 1; animation-timing-function: cubic-bezier(0.5, 0, 0.8, 0.5); }
+  100% { translate: 0 calc(var(--y) + 30px); opacity: 0; }}
+
+/* ══ Slide to confirm ══════════════════════════════════════
+   A handle crossing a track, and on commit the handle IS the
+   confirmation — it unfurls leftward and fills what it crossed.
+   The right edge stays put by arithmetic: x loses what width
+   gains. */
+.sld {
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  color: var(--fill-on, var(--ink));}
+
+.sld-track {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  /* ── the track is the SLAB, the handle is the INK ─────────
+     Slab and ink is the pair the liquid toggle uses: a light
+     track with a dark handle in light mode, the reverse in
+     dark. On commit the handle fills the track, so the
+     confirmed state is a solid ink pill in both. */
+  background: var(--fill-slab, var(--card));
+  /* the drag is the component; the browser may not take the
+     gesture for panning */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;}
+
+.sld-track[data-disabled] { pointer-events: none; }
+
+[data-stroke="on"] .sld-track {
+  box-shadow: inset 0 0 0 1px var(--pane-edge);}
+
+/* ── the ground already covered ─────────────────────────────
+   THE SAME INK AS THE HANDLE, which turns this from a trail
+   into the handle's own body. Matched, there is no seam to
+   find: the dot stretches out of the corner it started in and
+   the far end is still the dot.
+
+   It cannot be the ink at 100% and also sit UNDER the words. */
+.sld-wash {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  bottom: 4px;
+  background: var(--fill-on, var(--ink));
+  /* ── above the label, so it WIPES it ─────────────────────
+     Painted over, the words are covered by the advancing cap
+     instead: they leave under a rounded edge that is the
+     handle's own shape. The handle is `auto` and later in the
+     DOM, and `auto` loses to any z-index at all, so it needs
+     one of its own. */
+  z-index: 1;
+  pointer-events: none;}
+
+.sld-say {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  /* ── CENTRED IN THE PILL, not in the room beside it ──────
+     The track IS the object, and the overlap is the point,
+     since the capsule wipes the words as it comes. */
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.006em;
+  color: rgba(var(--fill-on-rgb, var(--ink-rgb)), 0.45);
+  pointer-events: none;
+  white-space: nowrap;}
+
+.sld-grip {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  background: var(--fill-on, var(--ink));
+  color: var(--fill-slab, var(--card));
+  cursor: grab;
+  /* a press still reaches the track by BUBBLING — the handle
+     is inside it — so nothing about the drag changes. */
+  pointer-events: auto;
+  /* the wall it lands against, so the squash compresses
+     toward the end of the track rather than about its middle */
+  transform-origin: 0% 50%;
+  /* it is placed by a motion value, so nothing here may
+     transition `transform` or the two fight every frame */
+  transition: none;
+  /* over the wash, which had to claim a layer to cover the
+     label — see .sld-wash */
+  z-index: 2;}
+
+.sld-track[data-held] .sld-grip { cursor: grabbing; }
+
+/* ── two contents, both ABSOLUTE ────────────────────────────
+   Stacked so neither has to make room for the other and the
+   handle's width is free to be whatever the morph says it is. */
+.sld-arrow,
+.sld-done {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.006em;
+  white-space: nowrap;
+  pointer-events: none;}
+
+@media (prefers-reduced-motion: reduce) {
+  .sld-done { transition-duration: 1ms; }
+}
+
+/* ShimmerButton beam */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 /* Custom minimal scrollbar */
 ::-webkit-scrollbar {
   width: 5px;

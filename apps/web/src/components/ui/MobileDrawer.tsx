@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -33,6 +33,13 @@ export function MobileDrawer({
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const { isConnected } = useWebSocket();
+
+  // next-themes resolves the theme only on the client, so any
+  // theme-dependent class would hydrate mismatched — render the
+  // resolved state from the first client paint onward instead.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const resolvedTheme = mounted ? theme : undefined;
 
   // Prevent body scroll when drawer is open
   useEffect(() => {
@@ -180,7 +187,7 @@ export function MobileDrawer({
             <button
               onClick={() => setTheme("light")}
               className={`p-1.5 rounded-lg text-xs transition-colors ${
-                theme === "light"
+                resolvedTheme === "light"
                   ? "bg-white text-zinc-900 shadow-xs font-semibold"
                   : "text-zinc-500 hover:text-zinc-900"
               }`}
@@ -191,7 +198,7 @@ export function MobileDrawer({
             <button
               onClick={() => setTheme("dark")}
               className={`p-1.5 rounded-lg text-xs transition-colors ${
-                theme === "dark"
+                resolvedTheme === "dark"
                   ? "bg-zinc-900 text-white shadow-xs font-semibold"
                   : "text-zinc-500 hover:text-white"
               }`}

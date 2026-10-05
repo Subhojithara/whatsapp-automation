@@ -7,8 +7,8 @@ import { ChatItem } from './ChatItem';
 import { apiClient } from '@/lib/api-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { ThreeDotsMenu, MenuItem } from '@/components/ui/ThreeDotsMenu';
+import { MagnifyingGlass } from '@/components/ui/MagnifyingGlass';
 import {
-  Search,
   Plus,
   RefreshCw,
   MessageSquare,
@@ -17,9 +17,9 @@ import {
   AlertCircle,
   Radio,
   CircleDashed,
-  X,
   Phone,
   CheckCircle2,
+  ChevronDown,
 } from 'lucide-react';
 
 type TabType = 'chats' | 'groups' | 'channels' | 'status';
@@ -238,7 +238,7 @@ export function ChatSidebar({
             <select
               value={selectedSessionId}
               onChange={(e) => onSelectSession(e.target.value)}
-              className="w-full bg-zinc-100/80 dark:bg-zinc-900/90 border border-zinc-200/80 dark:border-white/[0.08] text-zinc-900 dark:text-zinc-100 text-xs rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-emerald-500 font-medium cursor-pointer"
+              className="w-full appearance-none bg-zinc-100/80 dark:bg-zinc-900/90 border border-zinc-200/80 dark:border-white/[0.08] text-zinc-900 dark:text-zinc-100 text-xs rounded-xl px-3 py-1.5 pr-8 outline-none focus:ring-2 focus:ring-emerald-500 font-medium cursor-pointer"
             >
               {readySessions.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -246,6 +246,7 @@ export function ChatSidebar({
                 </option>
               ))}
             </select>
+            <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
           </div>
         )}
 
@@ -291,25 +292,12 @@ export function ChatSidebar({
           })}
         </div>
 
-        {/* Search Input Bar */}
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={`Search ${activeTab}...`}
-            className="w-full bg-zinc-100/80 dark:bg-[#121316] border border-zinc-200/80 dark:border-white/[0.08] text-zinc-900 dark:text-zinc-100 text-xs rounded-xl pl-9 pr-8 py-2 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-emerald-500/80 focus:border-emerald-500 transition-all"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => onSearchChange('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-md"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
+        {/* Search Input Bar (shared MagnifyingGlass control) */}
+        <MagnifyingGlass
+          value={searchQuery}
+          onChange={onSearchChange}
+          placeholder={`Search ${activeTab}...`}
+        />
       </div>
 
       {/* Chat List Scrollable View */}

@@ -2,7 +2,8 @@
 
 import { useWebSocket } from "@/hooks/use-websocket";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { LayoutGrid, Share2, RefreshCw, Menu } from "lucide-react";
+import { NotificationBell } from "@/components/ui/NotificationBell";
+import { LayoutGrid, RefreshCw, Menu } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -52,6 +53,21 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
           <span className="text-[10px] font-medium">{isConnected ? "Live Engine" : "Connecting..."}</span>
         </div>
 
+        {/* Engine Event Notifications */}
+        <NotificationBell
+          count={0}
+          recentEvents={[
+            {
+              id: "engine-status",
+              title: isConnected
+                ? "Engine connected — listening for realtime events"
+                : "Engine connecting...",
+              time: "Now",
+              type: isConnected ? "success" : "warn",
+            },
+          ]}
+        />
+
         {/* Refresh Button */}
         <button
           onClick={handleRefresh}
@@ -64,14 +80,6 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
 
         {/* Theme Toggle */}
         <ThemeToggle />
-
-        {/* Share Icon */}
-        <button
-          className="p-1.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 rounded-lg transition-colors border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700/50"
-          title="Share Dashboard"
-        >
-          <Share2 className="w-3.5 h-3.5" />
-        </button>
       </div>
     </header>
   );

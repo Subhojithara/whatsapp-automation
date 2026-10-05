@@ -7,7 +7,6 @@ import {
   Pause,
   Square,
   Copy,
-  Trash2,
   Send,
   CheckCircle2,
   Clock,
@@ -15,6 +14,7 @@ import {
   ChevronRight,
   ShieldCheck,
 } from "lucide-react";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
 
 interface TaskListProps {
   campaigns: Campaign[];
@@ -25,6 +25,9 @@ interface TaskListProps {
   onClone: (id: string, e: React.MouseEvent) => void;
   onDelete: (id: string, e: React.MouseEvent) => void;
   selectedCampaignId?: string | null;
+  /* rendered inline under the selected card — the detail drawer
+     travels with its campaign rather than floating elsewhere */
+  renderExpanded?: (campaign: Campaign) => React.ReactNode;
 }
 
 export function TaskList({
@@ -36,6 +39,7 @@ export function TaskList({
   onClone,
   onDelete,
   selectedCampaignId,
+  renderExpanded,
 }: TaskListProps) {
   if (campaigns.length === 0) {
     return null;
@@ -85,8 +89,8 @@ export function TaskList({
         const isSelected = selectedCampaignId === c.id;
 
         return (
+          <React.Fragment key={c.id}>
           <div
-            key={c.id}
             onClick={() => onSelectCampaign(c.id)}
             className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 cursor-pointer select-none group ${
               isSelected
@@ -158,13 +162,13 @@ export function TaskList({
                   <Copy className="w-4 h-4" />
                 </button>
 
-                <button
-                  onClick={(e) => onDelete(c.id, e)}
-                  className="p-2 rounded-xl text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
-                  title="Delete campaign"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <InlineConfirm
+                  title={`Delete "${c.name}"?`}
+                  description="The campaign and its recipients will be removed. This cannot be undone."
+                  onConfirm={() =>
+                    onDelete(c.id, { stopPropagation: () => {} } as React.MouseEvent)
+                  }
+                />
               </div>
             </div>
 
@@ -191,6 +195,14 @@ export function TaskList({
               </div>
             </div>
           </div>
+
+          {/* Inline Expanded Detail Panel */}
+          {isSelected && renderExpanded && (
+            <div onClick={(e) => e.stopPropagation()} className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200">
+              {renderExpanded(c)}
+            </div>
+          )}
+          </React.Fragment>
         );
       })}
     </div>

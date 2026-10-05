@@ -13,17 +13,20 @@ import {
   Send,
   BarChart2,
   Settings,
+  Plus,
 } from "lucide-react";
 
 interface NavSidebarProps {
   isCollapsed: boolean;
   onToggle: () => void;
+  onNewSession?: () => void;
   activeSessionsCount?: number;
 }
 
 export function NavSidebar({
   isCollapsed,
   onToggle,
+  onNewSession,
   activeSessionsCount = 0,
 }: NavSidebarProps) {
   const pathname = usePathname();
@@ -109,6 +112,31 @@ export function NavSidebar({
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
+        )}
+      </div>
+
+      {/* Primary Action: New Session. Falls back to the sessions
+          page when no handler is wired — the CTA must always
+          land somewhere useful. */}
+      <div className="p-3 pb-1">
+        {isCollapsed ? (
+          <Link
+            href="/dashboard/sessions"
+            onClick={onNewSession}
+            className="w-10 h-10 mx-auto rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 transition-all"
+            title="Create New Session"
+          >
+            <Plus className="w-5 h-5" />
+          </Link>
+        ) : (
+          <Link
+            href="/dashboard/sessions"
+            onClick={onNewSession}
+            className="w-full py-2.5 px-3.5 bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-500/20 text-left flex items-center justify-center gap-2 transition-all"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>New Session</span>
+          </Link>
         )}
       </div>
 

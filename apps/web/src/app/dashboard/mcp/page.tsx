@@ -24,6 +24,10 @@ import {
 import { LiquidToggle } from "@/components/ui/LiquidToggle";
 import { MagnifyingGlass } from "@/components/ui/MagnifyingGlass";
 import { ShimmerButton } from "@/components/ui/ShimmerButton";
+import { StepLayer } from "@/components/ui/StepLayer";
+import { Checklist, type ChecklistItem } from "@/components/ui/Checklist";
+import { Like } from "@/components/ui/Like";
+import { HandHeart } from "lucide-react";
 
 export default function McpDocsPage() {
   const [activeTab, setActiveTab] = useState<"config" | "tools" | "qr" | "skill" | "docker">("config");
@@ -36,14 +40,22 @@ export default function McpDocsPage() {
   const [autoSessionRouting, setAutoSessionRouting] = useState(true);
   const [stdioBridgeSandbox, setStdioBridgeSandbox] = useState(true);
 
+  // Agent safety posture shown alongside the installed skill
+  const skillAuditItems: ChecklistItem[] = [
+    { id: "throttle", title: "Anti-bot throttling enforced on tool calls", desc: "Rate-limits high-frequency agent invocation.", checked: antiBanThrottling, critical: true },
+    { id: "routing", title: "Auto session routing to healthy READY sessions", checked: autoSessionRouting },
+    { id: "sandbox", title: "Stdio bridge runs in an isolated sandbox", checked: stdioBridgeSandbox, critical: true },
+    { id: "blacklist", title: "Global blacklist checked before every outreach", desc: "get_blacklist / add_to_blacklist tools available to the agent.", checked: true },
+    { id: "spintax", title: "Campaign templates support Spintax variation", checked: true },
+  ];
+
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const antigravityConfig = JSON.stringify(
-    {
+  const antigravityConfig = JSON.stringify(    {
       mcpServers: {
         "velurix-reachout": {
           command: "node",
@@ -387,6 +399,18 @@ export default function McpDocsPage() {
             </p>
           </div>
 
+          {/* QR Flow stepper (rareui StepLayer) */}
+          <div className="pt-4 pb-2 overflow-x-auto">
+            <StepLayer
+              currentStep={4}
+              steps={[
+                { id: 1, label: "Call login_whatsapp", subtitle: "Agent requests a QR pairing session" },
+                { id: 2, label: "Display QR Image", subtitle: "User scans via Linked Devices" },
+                { id: 3, label: "Poll check_login_status", subtitle: "Status flips to CONNECTED" },
+              ]}
+            />
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
             <div className="bg-zinc-50 dark:bg-[#14151a] p-5 rounded-2xl border border-zinc-200/80 dark:border-white/[0.06] space-y-2.5">
               <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center justify-center">
@@ -450,6 +474,9 @@ export default function McpDocsPage() {
             <div>"Create and start a campaign named Q3Leads using session_123 with 30s jitter delay"</div>
             <div>"Check system health and show me all active WhatsApp sessions"</div>
           </div>
+
+          {/* Agent Safety Posture (rareui Checklist) */}
+          <Checklist items={skillAuditItems} title="Agent Execution Safety Posture" />
         </div>
       )}
 
@@ -471,6 +498,15 @@ export default function McpDocsPage() {
           </div>
         </div>
       )}
+
+      {/* Documentation Feedback (bencho Like) */}
+      <div className="flex flex-col items-center gap-2 pt-2 pb-4 select-none">
+        <div className="flex items-center gap-2 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+          <HandHeart className="w-3.5 h-3.5 text-emerald-500" />
+          <span>Was this MCP integration guide helpful?</span>
+        </div>
+        <Like start={1284} effect="Bloom" burst={60} />
+      </div>
     </div>
   );
 }

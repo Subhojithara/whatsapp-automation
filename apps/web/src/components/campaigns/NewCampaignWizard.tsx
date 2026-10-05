@@ -16,11 +16,18 @@ import {
   Shuffle,
   Eye,
   Users,
+  ArrowLeft,
 } from "lucide-react";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { apiClient } from "@/lib/api-client";
 import { Session } from "@/types/session";
+import { StepLayer } from "@/components/ui/StepLayer";
+import { UploadDropzone } from "@/components/ui/UploadDropzone";
+import { LabelInput } from "@/components/ui/LabelInput";
+import { Checklist, type ChecklistItem } from "@/components/ui/Checklist";
+import { SlideConfirm } from "@/components/ui/SlideToConfirm";
+import { TouchMe } from "@/components/ui/TouchMe";
 
 interface NewCampaignWizardProps {
   isOpen: boolean;
@@ -49,6 +56,7 @@ export function NewCampaignWizard({
 }: NewCampaignWizardProps) {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
   const [campaignName, setCampaignName] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [phoneColumn, setPhoneColumn] = useState<string>("");
@@ -87,11 +95,10 @@ export function NewCampaignWizard({
 
   if (!isOpen) return null;
 
-  // File Parse Handler
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  // File Parse Handler — accepts the File straight from the
+  // UploadDropzone so drag & drop and browse share one path
+  const parseRecipientFile = (file: File) => {
+    setSelectedFile(file);
     setError(null);
     const fileName = file.name.toLowerCase();
 
@@ -270,6 +277,28 @@ export function NewCampaignWizard({
     }
   };
 
+  // Pre-launch audit — mirrors the launch guards so the review
+  // step shows the same facts the launch control enforces
+  const auditItems: ChecklistItem[] = [
+    { id: "name", title: "Campaign name is set", checked: !!campaignName.trim(), critical: true },
+    {
+      id: "recipients",
+      title: `${parsedData.length} recipients loaded`,
+      desc: selectedFile ? `From ${selectedFile.name}` : undefined,
+      checked: parsedData.length > 0,
+      critical: true,
+    },
+    { id: "phone", title: `Phone column mapped${phoneColumn ? `: ${phoneColumn}` : ""}`, checked: !!phoneColumn, critical: true },
+    { id: "steps", title: `${sequenceSteps.length} message step(s) configured`, checked: sequenceSteps.length > 0 },
+    {
+      id: "sessions",
+      title: selectedSessionIds.length > 0 ? `${selectedSessionIds.length} session(s) assigned for load balancing` : "All active sessions will be used",
+      checked: true,
+    },
+    { id: "spintax", title: spintaxEnabled ? "Spintax variations enabled" : "Spintax disabled — identical text for every recipient", checked: spintaxEnabled },
+    { id: "hours", title: workingHoursEnabled ? `Working hours ${workingHoursStart} – ${workingHoursEnd}` : "Working hours window disabled", checked: workingHoursEnabled },
+  ];
+
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
@@ -296,63 +325,18 @@ export function NewCampaignWizard({
           </button>
         </div>
 
-        {/* Wizard Stepper Bar */}
-        <div className="px-6 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-800/30 flex items-center justify-between text-xs">
-          <div
-            className={`flex items-center gap-2 font-medium ${
-              currentStep === 1
-                ? "text-emerald-500 font-bold"
-                : currentStep > 1
-                ? "text-zinc-700 dark:text-zinc-300"
-                : "text-zinc-400"
-            }`}
-          >
-            <span className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px]">
-              1
-            </span>
-            <span>1. Upload File</span>
-          </div>
-          <div className="h-px w-8 bg-zinc-300 dark:bg-zinc-700" />
-          <div
-            className={`flex items-center gap-2 font-medium ${
-              currentStep === 2
-                ? "text-emerald-500 font-bold"
-                : currentStep > 2
-                ? "text-zinc-700 dark:text-zinc-300"
-                : "text-zinc-400"
-            }`}
-          >
-            <span className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px]">
-              2
-            </span>
-            <span>2. Map Columns</span>
-          </div>
-          <div className="h-px w-8 bg-zinc-300 dark:bg-zinc-700" />
-          <div
-            className={`flex items-center gap-2 font-medium ${
-              currentStep === 3
-                ? "text-emerald-500 font-bold"
-                : currentStep > 3
-                ? "text-zinc-700 dark:text-zinc-300"
-                : "text-zinc-400"
-            }`}
-          >
-            <span className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px]">
-              3
-            </span>
-            <span>3. Sequence & Anti-Ban</span>
-          </div>
-          <div className="h-px w-8 bg-zinc-300 dark:bg-zinc-700" />
-          <div
-            className={`flex items-center gap-2 font-medium ${
-              currentStep === 4 ? "text-emerald-500 font-bold" : "text-zinc-400"
-            }`}
-          >
-            <span className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px]">
-              4
-            </span>
-            <span>4. Review & Launch</span>
-          </div>
+        {/* Wizard Stepper (rareui StepLayer) */}
+        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-800/30 overflow-x-auto">
+          <StepLayer
+            currentStep={currentStep}
+            onStepClick={(id) => setCurrentStep(id as 1 | 2 | 3 | 4)}
+            steps={[
+              { id: 1, label: "Upload File", icon: Upload, subtitle: "CSV / Excel contacts" },
+              { id: 2, label: "Map Columns", icon: FileSpreadsheet, subtitle: "Phone & variables" },
+              { id: 3, label: "Sequence & Anti-Ban", icon: ShieldAlert, subtitle: "Follow-ups & pacing" },
+              { id: 4, label: "Review & Launch", icon: Eye, subtitle: "Final audit" },
+            ]}
+          />
         </div>
 
         {/* Modal Body */}
@@ -367,45 +351,27 @@ export function NewCampaignWizard({
           {/* STEP 1: Upload File */}
           {currentStep === 1 && (
             <div className="space-y-5">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  Campaign Name *
-                </label>
-                <input
-                  type="text"
-                  value={campaignName}
-                  onChange={(e) => setCampaignName(e.target.value)}
-                  placeholder="e.g. Q3 Outreach - Product Announcement"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
+              <LabelInput
+                label="Campaign Name"
+                badge="required"
+                placeholder="e.g. Q3 Outreach - Product Announcement"
+                value={campaignName}
+                onChange={(e) => setCampaignName(e.target.value)}
+              />
 
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  Upload CSV or Excel File (.csv, .xlsx, .xls) *
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                  Upload Recipient File
                 </label>
-                <div className="border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-emerald-500 dark:hover:border-emerald-500 rounded-2xl p-8 text-center bg-zinc-50/50 dark:bg-zinc-800/30 transition-all">
-                  <Upload className="w-10 h-10 mx-auto text-zinc-400 mb-3" />
-                  <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-                    Drag and drop your contact file here, or click to browse
-                  </p>
-                  <p className="text-xs text-zinc-500 mb-4">
-                    File should contain columns like Phone Number, Name, Company, etc.
-                  </p>
-                  <input
-                    type="file"
-                    accept=".csv, .xlsx, .xls"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    id="csv-file-input"
-                  />
-                  <label
-                    htmlFor="csv-file-input"
-                    className="cursor-pointer px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium text-xs shadow-sm transition-all inline-block"
-                  >
-                    Select File
-                  </label>
-                </div>
+                <UploadDropzone
+                  onFileSelect={parseRecipientFile}
+                  selectedFile={selectedFile}
+                  onClearFile={() => {
+                    setSelectedFile(null);
+                    setParsedData([]);
+                    setHeaders([]);
+                  }}
+                />
               </div>
 
               {parsedData.length > 0 && (
@@ -814,24 +780,28 @@ export function NewCampaignWizard({
                   </p>
                 </div>
               </div>
+              {/* Pre-Launch Safety Audit */}
+              <Checklist items={auditItems} title="Pre-Launch Anti-Ban Safety Audit" />
             </div>
           )}
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex items-center justify-between">
-          <button
+        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex items-center justify-between gap-3">
+          <TouchMe
+            variant="secondary"
             onClick={() => {
               if (currentStep > 1) setCurrentStep((currentStep - 1) as any);
             }}
             disabled={currentStep === 1 || loading}
-            className="px-4 py-2 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 transition-colors"
           >
+            <ArrowLeft className="w-3.5 h-3.5" />
             Back
-          </button>
+          </TouchMe>
 
           {currentStep < 4 ? (
-            <button
+            <TouchMe
+              variant="primary"
               onClick={() => {
                 if (currentStep === 1 && (!campaignName.trim() || parsedData.length === 0)) {
                   setError("Please enter a campaign name and upload a contact file");
@@ -840,23 +810,19 @@ export function NewCampaignWizard({
                 setError(null);
                 setCurrentStep((currentStep + 1) as any);
               }}
-              className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-medium shadow-sm transition-all"
             >
               Continue
-            </button>
+              <Play className="w-3.5 h-3.5 fill-current" />
+            </TouchMe>
           ) : (
-            <button
-              onClick={handleLaunch}
+            /* Launching a bulk send to every recipient should cost
+               more than one slip of the finger — hence the slide */
+            <SlideConfirm
+              label="Slide to Launch"
+              width={230}
               disabled={loading}
-              className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-2"
-            >
-              {loading ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Play className="w-4 h-4 fill-white" />
-              )}
-              <span>Launch Campaign</span>
-            </button>
+              onConfirm={handleLaunch}
+            />
           )}
         </div>
       </div>
