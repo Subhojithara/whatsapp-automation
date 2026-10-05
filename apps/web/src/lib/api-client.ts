@@ -219,12 +219,12 @@ export const apiClient = {
     fetchJson<{ id: string }>(`${API_BASE}/campaign-templates/${id}`, { method: 'DELETE' }),
 
   // Phone Validation API
-  validatePhoneNumbers: (session_id: string, phones: string[]) =>
-    fetchJson<{ results: Array<{ phone: string; exists: boolean; jid?: string }> }>(
-      `${API_BASE}/phone-validation/check`,
+  validatePhoneNumbers: (sessionId: string, phoneNumbers: string[]) =>
+    fetchJson<{ success: boolean; data: { sessionId: string; status: string; count: number } }>(
+      `${API_BASE}/phone-validation`,
       {
         method: 'POST',
-        body: JSON.stringify({ session_id, phones }),
+        body: JSON.stringify({ sessionId, phoneNumbers }),
       }
     ),
 };

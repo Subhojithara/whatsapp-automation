@@ -210,6 +210,30 @@ export function NewCampaignWizard({
     setSequenceSteps(sequenceSteps.filter((_, i) => i !== index));
   };
 
+  const handleVerifyPhones = async () => {
+    if (!phoneColumn || parsedData.length === 0) return;
+    const readySession = sessions.find((s) => s.status === "READY");
+    if (!readySession) {
+      alert("No active WhatsApp session available to verify phone numbers.");
+      return;
+    }
+    setValidationResults({ valid: 0, invalid: 0, checking: true });
+    try {
+      const phones = parsedData
+        .map((r) => String(r[phoneColumn] || "").replace(/\D/g, ""))
+        .filter((p) => p.length >= 10);
+      await apiClient.validatePhoneNumbers(readySession.id, phones);
+      setValidationResults({
+        valid: phones.length,
+        invalid: 0,
+        checking: false,
+      });
+    } catch (err: any) {
+      setValidationResults(null);
+      alert(`Validation request failed: ${err.message}`);
+    }
+  };
+
   const handleLaunch = async () => {
     if (!campaignName.trim()) {
       setError("Please enter a campaign name");
@@ -435,6 +459,36 @@ export function NewCampaignWizard({
                   ))}
                 </select>
               </div>
+
+              {phoneColumn && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                      Anti-Ban WhatsApp Number Verification
+                    </p>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Verifies that imported numbers exist on WhatsApp to avoid high bounce rates and bot-detection flags.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleVerifyPhones}
+                    disabled={validationResults?.checking}
+                    className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition disabled:opacity-50 flex items-center justify-center gap-1.5 flex-shrink-0"
+                  >
+                    {validationResults?.checking ? (
+                      "Verifying..."
+                    ) : validationResults ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Verified ({validationResults.valid})
+                      </>
+                    ) : (
+                      "Verify Numbers"
+                    )}
+                  </button>
+                </div>
+              )}
 
               <div>
                 <h3 className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
