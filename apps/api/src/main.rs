@@ -54,10 +54,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let connect_options = SqliteConnectOptions::from_str(&config.database_url)?
         .create_if_missing(true)
-        .foreign_keys(true);
+        .foreign_keys(true)
+        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+        .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
+        .busy_timeout(std::time::Duration::from_secs(15));
 
     let pool = SqlitePoolOptions::new()
-        .max_connections(5)
+        .max_connections(10)
         .connect_with(connect_options)
         .await?;
 
