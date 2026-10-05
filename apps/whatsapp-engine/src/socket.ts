@@ -939,8 +939,20 @@ export class EngineSocket {
           await this.sock.presenceSubscribe(targetJid);
           await this.sock.sendPresenceUpdate('composing', targetJid);
           const charSpeed = Math.floor(Math.random() * 15) + 20; // 20-35ms per character
-          const typingMs = Math.min(Math.max((text?.length || 10) * charSpeed, 800), 3500);
-          await new Promise((resolve) => setTimeout(resolve, typingMs));
+          const typingMs = Math.min(Math.max((text?.length || 10) * charSpeed, 800), 4500);
+
+          if (text && text.length > 70) {
+            const firstSegment = Math.floor(typingMs * 0.55);
+            const secondSegment = typingMs - firstSegment;
+            await new Promise((resolve) => setTimeout(resolve, firstSegment));
+            await this.sock.sendPresenceUpdate('paused', targetJid);
+            const pauseMs = Math.floor(Math.random() * 400) + 400; // 400-800ms natural thought pause
+            await new Promise((resolve) => setTimeout(resolve, pauseMs));
+            await this.sock.sendPresenceUpdate('composing', targetJid);
+            await new Promise((resolve) => setTimeout(resolve, secondSegment));
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, typingMs));
+          }
         }
       } catch (e: any) {
         console.error(`[Engine Socket] Presence/session pre-warm warning for ${targetJid}: ${e?.message}`);
