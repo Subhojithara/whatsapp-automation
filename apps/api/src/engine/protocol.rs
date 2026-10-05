@@ -252,6 +252,16 @@ pub struct PresenceSimulatedData {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CallRejectedData {
+    #[serde(rename = "callId")]
+    pub call_id: String,
+    pub from: String,
+    #[serde(rename = "isVideo")]
+    pub is_video: bool,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum EngineEvent {
     #[serde(rename = "contact.profile_picture")]
@@ -402,6 +412,14 @@ pub enum EngineEvent {
         data: MessageDeliveryUpdateData,
         v: u32,
     },
+    #[serde(rename = "call.rejected")]
+    CallRejected {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        timestamp: String,
+        data: CallRejectedData,
+        v: u32,
+    },
 }
 
 impl EngineEvent {
@@ -426,6 +444,7 @@ impl EngineEvent {
             EngineEvent::ChatMessages { session_id, .. } => session_id,
             EngineEvent::MessageReceived { session_id, .. } => session_id,
             EngineEvent::MessageDeliveryUpdate { session_id, .. } => session_id,
+            EngineEvent::CallRejected { session_id, .. } => session_id,
         }
     }
 }

@@ -225,6 +225,14 @@ pub fn start_event_processor(
                         "Processing PresenceSimulated engine event"
                     );
                 }
+                EngineEvent::CallRejected { data, .. } => {
+                    tracing::info!(
+                        session_id = %session_id,
+                        from = %data.from,
+                        call_id = %data.call_id,
+                        "Incoming WhatsApp call auto-declined"
+                    );
+                }
             }
         }
     });
