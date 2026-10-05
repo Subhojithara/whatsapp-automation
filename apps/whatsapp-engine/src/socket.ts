@@ -270,9 +270,33 @@ export class EngineSocket {
         console.error(`[Engine Socket] Using fallback Baileys version ${version.join('.')}`);
       }
 
+      let agent: any = undefined;
+      let proxyUrl = process.env[`PROXY_${this.sessionId}`] || process.env.PROXY_URL;
+      if (!proxyUrl && this.authDir) {
+        try {
+          const pFile = path.join(this.authDir, 'proxy.json');
+          if (fs.existsSync(pFile)) {
+            const pData = JSON.parse(fs.readFileSync(pFile, 'utf8'));
+            proxyUrl = pData?.proxy || pData?.url;
+          }
+        } catch {}
+      }
+
+      if (proxyUrl) {
+        try {
+          const masked = proxyUrl.replace(/:[^:@]+@/, ':****@');
+          console.error(`[Engine Socket] Session ${this.sessionId} routing traffic via proxy: ${masked}`);
+          const { ProxyAgent } = await import('proxy-agent');
+          agent = new ProxyAgent({ getProxyForUrl: () => proxyUrl });
+        } catch (err: any) {
+          console.error(`[Engine Socket] Failed to initialize proxy agent for ${this.sessionId}:`, err?.message);
+        }
+      }
+
       this.sock = makeWASocket({
         version,
         auth: state,
+        agent,
         printQRInTerminal: false,
         logger: logger as any,
         browser: Browsers.windows('Chrome'),
